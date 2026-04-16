@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Agregador de pesquisas eleitorais para o segundo turno da eleição presidencial brasileira de 2026. Estimativas baseadas em Filtro de Kalman.">
+<meta property="og:title" content="Agregador de Pesquisas 2026 — Lula × Flávio Bolsonaro">
+<meta property="og:description" content="Estimativas de intenção de voto com Filtro de Kalman para o 2º turno das eleições presidenciais brasileiras 2026.">
+<title>Agregador de Pesquisas Eleitorais 2026</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+
+<style>
+/* ── Reset & Variables ─────────────────────────────────────────────── */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg:          #07090f;
+  --surface:     #0e1320;
+  --surface2:    #141928;
+  --border:      #1f2d45;
+  --verde:       #00c853;
+  --verde-dim:   #007a32;
+  --amarelo:     #ffc107;
+  --lula-red:    #c0122d;
+  --lula-dim:    #7a0019;
+  --flavio-blue: #2d35a0;
+  --flavio-dim:  #1a1f6e;
+  --text:        #e4e8f5;
+  --muted:       #5a6a88;
+  --mono:        'JetBrains Mono', monospace;
+  --sans:        'Sora', sans-serif;
+}
+
+body {
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ── Noise texture overlay ─────────────────────────────────────────── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── Header ────────────────────────────────────────────────────────── */
+header {
+  position: relative;
+  padding: 3.5rem 1.5rem 3rem;
+  text-align: center;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, #0b1124 0%, var(--bg) 100%);
+  overflow: hidden;
+}
+
+header::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg,
+    transparent 0%, var(--verde) 30%, var(--amarelo) 50%, var(--verde) 70%, transparent 100%);
+}
+
+.flag-stripe {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #009C3B 33%, #FFDF00 33% 66%, #002776 66%);
+}
+
+.header-badge {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--verde);
+  border: 1px solid var(--verde-dim);
+  padding: 0.3rem 0.9rem;
+  border-radius: 999px;
+  margin-bottom: 1.2rem;
+  background: rgba(0,200,83,0.06);
+}
+
+h1 {
+  font-size: clamp(1.7rem, 4.5vw, 3rem);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  background: linear-gradient(135deg, #fff 40%, var(--amarelo) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 0.6rem;
+}
+
+.subtitle {
+  font-size: clamp(0.95rem, 2vw, 1.15rem);
+  color: var(--muted);
+  font-weight: 300;
+  letter-spacing: 0.03em;
+}
+
+.update-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1.4rem;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 0.45rem 1rem;
+  border-radius: 999px;
+}
+
+.pulse {
+  width: 7px; height: 7px;
+  background: var(--verde);
+  border-radius: 50%;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.7); }
+}
+
+/* ── Main Layout ───────────────────────────────────────────────────── */
+main { max-width: 980px; margin: 0 auto; padding: 3rem 1.25rem 4rem; position: relative; z-index: 1; }
+
+section { margin-bottom: 4rem; }
+
+.section-label {
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--verde);
+  margin-bottom: 1.2rem;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.section-label::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* ── Chart ─────────────────────────────────────────────────────────── */
+.chart-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 1.25rem;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.chart-wrap::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--verde), transparent);
+}
+
+.chart-wrap img {
+  width: 100%;
+  border-radius: 10px;
+  display: block;
+}
+
+.chart-caption {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--muted);
+  margin-top: 0.9rem;
+  text-align: center;
+}
+
+/* ── Candidates ────────────────────────────────────────────────────── */
+.candidates-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+}
+
+@media (max-width: 580px) {
+  .candidates-grid { grid-template-columns: 1fr; }
+}
+
+.c-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 2rem 1.5rem 1.75rem;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.25s, box-shadow 0.25s;
+}
+
+.c-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+}
+
+.c-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+}
+
+.c-card.lula::before { background: linear-gradient(90deg, var(--lula-dim), var(--lula-red)); }
+.c-card.flavio::before { background: linear-gradient(90deg, var(--flavio-dim), var(--flavio-blue)); }
+
+.c-card::after {
+  content: '';
+  position: absolute;
+  top: -60px; right: -60px;
+  width: 180px; height: 180px;
+  border-radius: 50%;
+  opacity: 0.04;
+}
+
+.c-card.lula::after { background: var(--lula-red); }
+.c-card.flavio::after { background: var(--flavio-blue); }
+
+.c-photo {
+  width: 110px; height: 110px;
+  border-radius: 50%;
+  object-fit: cover;
+  object-position: center top;
+  border: 3px solid;
+  margin-bottom: 1.1rem;
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.lula .c-photo { border-color: var(--lula-red); box-shadow: 0 0 20px rgba(192,18,45,0.3); }
+.flavio .c-photo { border-color: var(--flavio-blue); box-shadow: 0 0 20px rgba(45,53,160,0.3); }
+
+.c-name {
+  font-size: 1.2rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin-bottom: 0.15rem;
+}
+
+.c-party {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--muted);
+  letter-spacing: 0.1em;
+  margin-bottom: 1.6rem;
+}
+
+.stat {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1rem 1.1rem;
+  margin-bottom: 0.7rem;
+  text-align: left;
+}
+
+.stat-lbl {
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  margin-bottom: 0.4rem;
+}
+
+.stat-val {
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.lula .stat-val.primary { color: #e84060; }
+.flavio .stat-val.primary { color: #6888e0; }
+
+.stat-val.ic {
+  font-size: 0.9rem;
+  font-family: var(--mono);
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.stat-val.prob { font-size: 1.5rem; }
+.high { color: var(--verde) !important; }
+.low  { color: #e84060 !important; }
+
+/* ── Battle bar ────────────────────────────────────────────────────── */
+.battle-bar-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 1.4rem 1.5rem;
+  margin-top: 1.25rem;
+}
+
+.bb-labels {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin-bottom: 0.7rem;
+}
+
+.bb-track {
+  height: 32px;
+  border-radius: 16px;
+  background: var(--bg);
+  display: flex;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.bb-lula {
+  height: 100%;
+  background: linear-gradient(90deg, var(--lula-dim), var(--lula-red));
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 10px;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: rgba(255,255,255,0.9);
+  transition: width 1.2s cubic-bezier(0.4,0,0.2,1);
+  white-space: nowrap;
+}
+
+.bb-flavio {
+  height: 100%;
+  background: linear-gradient(90deg, var(--flavio-blue), #5060c8);
+  display: flex;
+  align-items: center;
+  padding-left: 10px;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: rgba(255,255,255,0.9);
+  transition: width 1.2s cubic-bezier(0.4,0,0.2,1);
+  white-space: nowrap;
+}
+
+.bb-divider {
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  color: var(--muted);
+  margin-top: 0.6rem;
+}
+
+/* ── Info cards ────────────────────────────────────────────────────── */
+.info-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 1.8rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.info-card + .info-card { margin-top: 1.2rem; }
+
+.info-card::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: var(--verde);
+}
+
+.info-card h3 {
+  font-size: 1rem;
+  font-weight: 700;
+  margin-bottom: 0.7rem;
+  color: var(--amarelo);
+}
+
+.info-card p {
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.7;
+}
+
+.info-card a {
+  color: var(--verde);
+  text-decoration: none;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-top: 0.8rem;
+  transition: color 0.2s;
+}
+.info-card a:hover { color: #5fffaa; }
+
+/* ── PIX card ──────────────────────────────────────────────────────── */
+.pix-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 2.5rem 2rem;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.pix-card::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: var(--amarelo);
+}
+
+.pix-hat { font-size: 3rem; display: block; margin-bottom: 0.8rem; }
+
+.pix-card p {
+  color: var(--muted);
+  font-size: 0.95rem;
+  max-width: 480px;
+  margin: 0 auto 1.4rem;
+  line-height: 1.7;
+}
+
+.pix-key-box {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: var(--surface2);
+  border: 1px solid var(--amarelo);
+  border-radius: 10px;
+  padding: 0.7rem 1.4rem;
+  font-family: var(--mono);
+  font-size: 0.9rem;
+  color: var(--amarelo);
+  cursor: pointer;
+  transition: background 0.2s, transform 0.15s;
+  user-select: none;
+}
+
+.pix-key-box:hover { background: rgba(255,193,7,0.08); transform: scale(1.02); }
+.pix-key-box:active { transform: scale(0.98); }
+
+.pix-feedback {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--verde);
+  height: 1.2rem;
+  margin-top: 0.7rem;
+  display: block;
+}
+
+/* ── Footer ────────────────────────────────────────────────────────── */
+footer {
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding: 2.5rem 1.5rem;
+  text-align: center;
+  position: relative;
+  z-index: 1;
+}
+
+footer::before {
+  content: '';
+  display: block;
+  height: 2px;
+  margin-bottom: 2.5rem;
+  background: linear-gradient(90deg,
+    transparent, var(--verde) 30%, var(--amarelo) 50%, var(--verde) 70%, transparent);
+}
+
+.footer-name {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 0.4rem;
+}
+
+.footer-links {
+  display: flex;
+  justify-content: center;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.8rem;
+}
+
+.footer-links a {
+  color: var(--verde);
+  text-decoration: none;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.05em;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  transition: color 0.2s;
+}
+.footer-links a:hover { color: #5fffaa; }
+
+.footer-note {
+  margin-top: 1.4rem;
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  color: var(--muted);
+  line-height: 1.8;
+}
+
+/* ── Skeleton loading ──────────────────────────────────────────────── */
+.skel {
+  background: linear-gradient(90deg, var(--surface) 25%, var(--surface2) 50%, var(--surface) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 6px;
+  color: transparent !important;
+  min-width: 80px;
+  display: inline-block;
+}
+
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── Responsive tweaks ─────────────────────────────────────────────── */
+@media (max-width: 480px) {
+  .c-card { padding: 1.5rem 1.1rem; }
+  .stat-val { font-size: 1.6rem; }
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════ HEADER ═══════════════════════════════════════════ -->
+<header>
+  <div class="flag-stripe"></div>
+  <div class="header-badge">🗳️ Eleições Presidenciais Brasileiras 2026</div>
+  <h1>Agregador de Pesquisas Eleitorais</h1>
+  <p class="subtitle">Segundo Turno — Lula (PT) × Flávio Bolsonaro (PL)</p>
+  <div class="update-pill">
+    <span class="pulse"></span>
+    <span id="update-text">Carregando dados...</span>
+  </div>
+</header>
+
+<!-- ═══════════════ MAIN ══════════════════════════════════════════════ -->
+<main>
+
+  <!-- Gráfico ─────────────────────────────────────────────────────── -->
+  <section>
+    <div class="section-label">Série Temporal Estimada</div>
+    <div class="chart-wrap">
+      <img src="kalman_filtro_online.png" id="chart-img"
+           alt="Filtro de Kalman – Intenção de voto estimada (2º Turno Lula × Flávio Bolsonaro)">
+      <p class="chart-caption">
+        Filtro de Kalman com vieses por instituto · Banda = IC 95% · Pontos = observações brutas ajustadas
+      </p>
+    </div>
+  </section>
+
+  <!-- Candidatos ───────────────────────────────────────────────────── -->
+  <section>
+    <div class="section-label">Estimativas Atuais do Modelo</div>
+
+    <div class="candidates-grid">
+
+      <!-- LULA -->
+      <div class="c-card lula">
+        <img class="c-photo"
+             src="Foto_oficial_de_Luiz_Inácio_Lula_da_Silva.jpg"
+             alt="Luiz Inácio Lula da Silva">
+        <div class="c-name">Lula</div>
+        <div class="c-party">PT · Partido dos Trabalhadores</div>
+
+        <div class="stat">
+          <div class="stat-lbl">Intenção de voto (normalizada)</div>
+          <div class="stat-val primary" id="lula-pct"><span class="skel">——.—%</span></div>
+        </div>
+
+        <div class="stat">
+          <div class="stat-lbl">Intervalo de confiança 95%</div>
+          <div class="stat-val ic" id="lula-ic"><span class="skel">[ ——.—% , ——.—% ]</span></div>
+        </div>
+
+        <div class="stat">
+          <div class="stat-lbl">P(Lula recebe &gt; 50% dos votos)</div>
+          <div class="stat-val prob" id="lula-prob"><span class="skel">——.—%</span></div>
+        </div>
+      </div>
+
+      <!-- FLÁVIO -->
+      <div class="c-card flavio">
+        <img class="c-photo"
+             src="Foto_oficial_de_Flavio_Bolsonaro.jpg"
+             alt="Flávio Bolsonaro">
+        <div class="c-name">Flávio Bolsonaro</div>
+        <div class="c-party">PL · Partido Liberal</div>
+
+        <div class="stat">
+          <div class="stat-lbl">Intenção de voto (normalizada)</div>
+          <div class="stat-val primary" id="flavio-pct"><span class="skel">——.—%</span></div>
+        </div>
+
+        <div class="stat">
+          <div class="stat-lbl">Intervalo de confiança 95%</div>
+          <div class="stat-val ic" id="flavio-ic"><span class="skel">[ ——.—% , ——.—% ]</span></div>
+        </div>
+
+        <div class="stat">
+          <div class="stat-lbl">P(Flávio recebe &gt; 50% dos votos)</div>
+          <div class="stat-val prob" id="flavio-prob"><span class="skel">——.—%</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Barra de disputa -->
+    <div class="battle-bar-wrap">
+      <div class="bb-labels">
+        <span>← Lula (PT)</span>
+        <span>50%</span>
+        <span>Flávio (PL) →</span>
+      </div>
+      <div class="bb-track">
+        <div class="bb-lula"  id="bar-lula"   style="width:50%">—</div>
+        <div class="bb-flavio" id="bar-flavio" style="width:50%">—</div>
+      </div>
+      <div class="bb-divider" id="bar-note">Aguardando dados...</div>
+    </div>
+  </section>
+
+  <!-- Sobre o Modelo ───────────────────────────────────────────────── -->
+  <section>
+    <div class="section-label">Metodologia</div>
+
+    <div class="info-card">
+      <h3>📐 Modelo de Espaço de Estados com Filtro de Kalman</h3>
+      <p>
+        As estimativas são produzidas por um modelo de espaço de estados onde a intenção de voto 
+        latente evolui como um passeio aleatório na escala logit. Cada pesquisa é incorporada 
+        como observação ruidosa, com variância proporcional ao erro amostral e ajustada pela 
+        fração de indecisos. Vieses sistemáticos por instituto são estimados via algoritmo EM e 
+        mantidos fixos na filtragem online. Os parâmetros são re-estimados mensalmente; 
+        as pesquisas são coletadas a cada 6 horas.
+      </p>
+      <a href="Agregador_de_Pesquisas_Eleitorais.pdf" target="_blank">
+        📥 Nota Técnica Completa (PDF)
+      </a>
+    </div>
+
+    <div class="info-card">
+      <h3>📚 Fonte dos Dados</h3>
+      <p>
+        Pesquisas coletadas automaticamente da Wikipedia (PT) — 
+        <em>Pesquisas de opinião para a eleição presidencial no Brasil em 2026</em>.
+        Institutos utilizados: Datafolha, Paraná Pesquisas, Genial/Quaest, AtlasIntel e Futura/Apex.
+        As intenções de voto são normalizadas para excluir indecisos, brancos e nulos,
+        e a data de cada pesquisa corresponde ao último dia de campo.
+      </p>
+    </div>
+  </section>
+
+  <!-- Sugestões ────────────────────────────────────────────────────── -->
+  <section>
+    <div class="section-label">Contato</div>
+
+    <div class="info-card">
+      <h3>💬 Sugestões e Críticas</h3>
+      <p>
+        Este é um projeto em desenvolvimento contínuo. Sugestões metodológicas, críticas, 
+        apontamento de erros e propostas de melhoria são muito bem-vindos — são elas que 
+        fazem o projeto evoluir. Entre em contato diretamente com o autor:
+      </p>
+      <a href="mailto:joaquimacbermudes@gmail.com">
+        ✉️ joaquimacbermudes@gmail.com
+      </a>
+    </div>
+  </section>
+
+  <!-- PIX ──────────────────────────────────────────────────────────── -->
+  <section>
+    <div class="section-label">Apoie o Projeto</div>
+
+    <div class="pix-card">
+      <span class="pix-hat">🎩</span>
+      <p>
+        Manter o servidor rodando, os dados atualizados e o modelo melhorando leva tempo.
+        Se o agregador foi útil para você — para uma análise, um artigo, ou simplesmente 
+        para acompanhar as eleições — considere contribuir com qualquer valor via PIX.
+        <br><br>
+        <em>Passando o chapéu...</em>
+      </p>
+      <div class="pix-key-box" onclick="copiarPix()" role="button" tabindex="0">
+        <span>📋</span>
+        <span>joaquimacbermudes@gmail.com</span>
+      </div>
+      <span class="pix-feedback" id="pix-feedback"></span>
+    </div>
+  </section>
+
+</main>
+
+<!-- ═══════════════ FOOTER ══════════════════════════════════════════ -->
+<footer>
+  <div class="footer-name">Joaquim Antônio Costa Bermudes</div>
+  <div class="footer-links">
+    <a href="https://www.linkedin.com/in/joaquimbermudes/" target="_blank">
+      🔗 LinkedIn
+    </a>
+    <a href="mailto:joaquimacbermudes@gmail.com">
+      ✉️ E-mail
+    </a>
+    <a href="Agregador_de_Pesquisas_Eleitorais.pdf" target="_blank">
+      📄 Nota Técnica
+    </a>
+    <a href="https://github.com/joaquimbermudes/Agregador_2026" target="_blank">
+      ⚙️ Código-fonte
+    </a>
+  </div>
+  <div class="footer-note">
+    Modelo: Filtro de Kalman com vieses por instituto (EM offline) ·
+    Dados: Wikipedia PT (scraping automático) ·
+    Atualização: a cada 6 horas via GitHub Actions<br>
+    Este agregador tem caráter informativo e não constitui previsão eleitoral oficial.
+  </div>
+</footer>
+
+<!-- ═══════════════ SCRIPTS ══════════════════════════════════════════ -->
+<script>
+/* Formata número como percentual com 1 casa decimal */
+const fmt = v => (v * 100).toFixed(1) + '%';
+
+/* Formata data ISO para pt-BR */
+function fmtDate(iso) {
+  const d = new Date(iso + 'T12:00:00');
+  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+}
+
+/* Copia chave PIX */
+function copiarPix() {
+  const chave = 'joaquimacbermudes@gmail.com';
+  const fb    = document.getElementById('pix-feedback');
+  navigator.clipboard.writeText(chave)
+    .then(() => {
+      fb.textContent = '✅ Chave PIX copiada para a área de transferência!';
+      setTimeout(() => { fb.textContent = ''; }, 3500);
+    })
+    .catch(() => {
+      fb.textContent = '📋 ' + chave;
+    });
+}
+
+/* Carrega dados do JSON e popula a página */
+fetch('kalman_filtro_resultados.json?v=' + Date.now())
+  .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+  .then(d => {
+    const lp = d.intencao_voto_lula;
+    const fp = d.intencao_voto_flavio;
+    const pv = d.probabilidade_vitoria;
+
+    /* — Pill de atualização — */
+    document.getElementById('update-text').textContent =
+      `Última pesquisa: ${fmtDate(d.data_ultima_pesquisa)} · ${d.instituto_ultima_pesquisa} · atualizado automaticamente a cada 6h`;
+
+    /* — Lula — */
+    const lulaEl = document.getElementById('lula-pct');
+    lulaEl.textContent = fmt(lp.estimativa);
+
+    document.getElementById('lula-ic').textContent =
+      `[ ${fmt(lp.ic95_lo)}  ,  ${fmt(lp.ic95_hi)} ]`;
+
+    const lulaProb = pv.lula_acima_50pct;
+    const lpEl = document.getElementById('lula-prob');
+    lpEl.textContent = fmt(lulaProb);
+    lpEl.className = 'stat-val prob ' + (lulaProb >= 0.5 ? 'high' : 'low');
+
+    /* — Flávio — */
+    document.getElementById('flavio-pct').textContent = fmt(fp.estimativa);
+
+    document.getElementById('flavio-ic').textContent =
+      `[ ${fmt(fp.ic95_lo)}  ,  ${fmt(fp.ic95_hi)} ]`;
+
+    const flavioProb = pv.flavio_acima_50pct;
+    const fpEl = document.getElementById('flavio-prob');
+    fpEl.textContent = fmt(flavioProb);
+    fpEl.className = 'stat-val prob ' + (flavioProb >= 0.5 ? 'high' : 'low');
+
+    /* — Barra de disputa — */
+    const lPct = (lp.estimativa * 100).toFixed(1);
+    const fPct = (fp.estimativa * 100).toFixed(1);
+    setTimeout(() => {
+      document.getElementById('bar-lula').style.width   = lPct + '%';
+      document.getElementById('bar-lula').textContent   = lPct + '%';
+      document.getElementById('bar-flavio').style.width = fPct + '%';
+      document.getElementById('bar-flavio').textContent = fPct + '%';
+    }, 300);
+
+    const lider = lp.estimativa > fp.estimativa ? 'Lula lidera' : 'Flávio lidera';
+    const diff  = Math.abs(lp.estimativa - fp.estimativa);
+    document.getElementById('bar-note').textContent =
+      `${lider} por ${fmt(diff)} · base: votos válidos normalizados`;
+
+    /* — Atualiza imagem sem cache — */
+    document.getElementById('chart-img').src =
+      'kalman_filtro_online.png?v=' + Date.now();
+  })
+  .catch(err => {
+    document.getElementById('update-text').textContent = 'Erro ao carregar dados — tente recarregar a página.';
+    console.error('Erro ao carregar JSON:', err);
+  });
+</script>
+</body>
+</html>
