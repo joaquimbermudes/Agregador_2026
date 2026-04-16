@@ -1,6 +1,17 @@
 {
-  "timestamp": "2026-04-14T18:18:20",
+  "timestamp": "2026-04-16T21:39:52",
   "records": {
+    "2026 | Genial/Quaest | 09 Abr - 13 Abr": {
+      "Ano": "2026",
+      "Contratante": "Genial/Quaest",
+      "Data(s) de Pesquisa": "09 Abr - 13 Abr",
+      "Tamanho da Amostra": "2004",
+      "Margem de Erro (pp)": "2.0",
+      "Lula (PT) %": "40.0",
+      "Flávio (PL) %": "42.0",
+      "Indecisos e Absentos %": "18.0",
+      "Vantagem": "2%"
+    },
     "2026 | CNT/MDA | 08 Abr - 12 Abr": {
       "Ano": "2026",
       "Contratante": "CNT/MDA",
