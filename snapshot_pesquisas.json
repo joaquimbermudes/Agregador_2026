@@ -1,6 +1,17 @@
 {
-  "timestamp": "2026-04-27T14:05:50",
+  "timestamp": "2026-04-27T19:40:21",
   "records": {
+    "2026 | Nexus/BTG | 24 Abr - 26 Abr": {
+      "Ano": "2026",
+      "Contratante": "Nexus/BTG",
+      "Data(s) de Pesquisa": "24 Abr - 26 Abr",
+      "Tamanho da Amostra": "2028",
+      "Margem de Erro (pp)": "2.0",
+      "Lula (PT) %": "46.0",
+      "Flávio (PL) %": "45.0",
+      "Indecisos e Absentos %": "9.0",
+      "Vantagem": "1%"
+    },
     "2026 | Genial/Quaest | 09 Abr - 13 Abr": {
       "Ano": "2026",
       "Contratante": "Genial/Quaest",
