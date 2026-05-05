@@ -1,6 +1,17 @@
 {
-  "timestamp": "2026-05-05T08:18:08",
+  "timestamp": "2026-05-05T19:28:18",
   "records": {
+    "2026 | Real Time Big Data | 2 Mai - 4 Mai": {
+      "Ano": "2026",
+      "Contratante": "Real Time Big Data",
+      "Data(s) de Pesquisa": "2 Mai - 4 Mai",
+      "Tamanho da Amostra": "2000",
+      "Margem de Erro (pp)": "2.0",
+      "Lula (PT) %": "43.0",
+      "Flávio (PL) %": "44.0",
+      "Indecisos e Absentos %": "13.0",
+      "Vantagem": "1%"
+    },
     "2026 | AtlasIntel | 22 Abr - 27 Abr": {
       "Ano": "2026",
       "Contratante": "AtlasIntel",
