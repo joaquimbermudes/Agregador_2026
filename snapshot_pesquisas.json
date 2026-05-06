@@ -1,6 +1,17 @@
 {
-  "timestamp": "2026-05-06T08:33:09",
+  "timestamp": "2026-05-06T14:26:40",
   "records": {
+    "2026 | Meio/Ideia | 1 Mai - 5 Mai": {
+      "Ano": "2026",
+      "Contratante": "Meio/Ideia",
+      "Data(s) de Pesquisa": "1 Mai - 5 Mai",
+      "Tamanho da Amostra": "1500",
+      "Margem de Erro (pp)": "2.5",
+      "Lula (PT) %": "44.7",
+      "Flávio (PL) %": "45.3",
+      "Indecisos e Absentos %": "10.0",
+      "Vantagem": "0,6%"
+    },
     "2026 | Real Time Big Data | 2 Mai - 4 Mai": {
       "Ano": "2026",
       "Contratante": "Real Time Big Data",
