@@ -1,6 +1,17 @@
 {
-  "timestamp": "2026-05-11T15:21:49",
+  "timestamp": "2026-05-11T19:54:29",
   "records": {
+    "2026 | Apex/Futura | 4 Mai - 8 Mai": {
+      "Ano": "2026",
+      "Contratante": "Apex/Futura",
+      "Data(s) de Pesquisa": "4 Mai - 8 Mai",
+      "Tamanho da Amostra": "2000",
+      "Margem de Erro (pp)": "2.2",
+      "Lula (PT) %": "44.4",
+      "Flávio (PL) %": "46.9",
+      "Indecisos e Absentos %": "8.6",
+      "Vantagem": "2,5%"
+    },
     "2026 | Meio/Ideia | 1 Mai - 5 Mai": {
       "Ano": "2026",
       "Contratante": "Meio/Ideia",
