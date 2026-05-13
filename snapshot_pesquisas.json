@@ -1,6 +1,17 @@
 {
-  "timestamp": "2026-05-13T08:50:49",
+  "timestamp": "2026-05-13T14:45:16",
   "records": {
+    "2026 | Genial/Quaest | 8 Mai - 11 Mai": {
+      "Ano": "2026",
+      "Contratante": "Genial/Quaest",
+      "Data(s) de Pesquisa": "8 Mai - 11 Mai",
+      "Tamanho da Amostra": "2004",
+      "Margem de Erro (pp)": "2.0",
+      "Lula (PT) %": "42.0",
+      "Flávio (PL) %": "41.0",
+      "Indecisos e Absentos %": "17.0",
+      "Vantagem": "1%"
+    },
     "2026 | Apex/Futura | 4 Mai - 8 Mai": {
       "Ano": "2026",
       "Contratante": "Apex/Futura",
