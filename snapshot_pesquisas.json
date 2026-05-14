@@ -1,6 +1,17 @@
 {
-  "timestamp": "2026-05-14T14:25:29",
+  "timestamp": "2026-05-14T19:52:06",
   "records": {
+    "2026 | Gerp | 8 Mai - 12 Mai": {
+      "Ano": "2026",
+      "Contratante": "Gerp",
+      "Data(s) de Pesquisa": "8 Mai - 12 Mai",
+      "Tamanho da Amostra": "2000",
+      "Margem de Erro (pp)": "2.24",
+      "Lula (PT) %": "43.0",
+      "Flávio (PL) %": "50.0",
+      "Indecisos e Absentos %": "7.0",
+      "Vantagem": "7%"
+    },
     "2026 | Genial/Quaest | 8 Mai - 11 Mai": {
       "Ano": "2026",
       "Contratante": "Genial/Quaest",
