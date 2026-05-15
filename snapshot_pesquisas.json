@@ -1,6 +1,17 @@
 {
-  "timestamp": "2026-05-15T08:54:30",
+  "timestamp": "2026-05-15T14:19:20",
   "records": {
+    "2026 | Vox | 9 Mai - 12 Mai": {
+      "Ano": "2026",
+      "Contratante": "Vox",
+      "Data(s) de Pesquisa": "9 Mai - 12 Mai",
+      "Tamanho da Amostra": "2100",
+      "Margem de Erro (pp)": "2.15",
+      "Lula (PT) %": "40.2",
+      "Flávio (PL) %": "43.8",
+      "Indecisos e Absentos %": "16.0",
+      "Vantagem": "3,6%"
+    },
     "2026 | Gerp | 8 Mai - 12 Mai": {
       "Ano": "2026",
       "Contratante": "Gerp",
