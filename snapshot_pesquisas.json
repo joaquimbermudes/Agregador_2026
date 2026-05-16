@@ -1,6 +1,17 @@
 {
-  "timestamp": "2026-05-16T13:42:11",
+  "timestamp": "2026-05-16T19:11:53",
   "records": {
+    "2026 | Datafolha | 12 Mai - 14 Mai": {
+      "Ano": "2026",
+      "Contratante": "Datafolha",
+      "Data(s) de Pesquisa": "12 Mai - 14 Mai",
+      "Tamanho da Amostra": "2004",
+      "Margem de Erro (pp)": "2.0",
+      "Lula (PT) %": "45.0",
+      "Flávio (PL) %": "45.0",
+      "Indecisos e Absentos %": "10.0",
+      "Vantagem": "0%"
+    },
     "2026 | Vox | 9 Mai - 12 Mai": {
       "Ano": "2026",
       "Contratante": "Vox",
