@@ -1,6 +1,17 @@
 {
-  "timestamp": "2026-05-19T09:55:04",
+  "timestamp": "2026-05-19T15:34:49",
   "records": {
+    "2026 | AtlasIntel | 13 Mai - 18 Mai": {
+      "Ano": "2026",
+      "Contratante": "AtlasIntel",
+      "Data(s) de Pesquisa": "13 Mai - 18 Mai",
+      "Tamanho da Amostra": "5032",
+      "Margem de Erro (pp)": "1.0",
+      "Lula (PT) %": "48.9",
+      "Flávio (PL) %": "41.8",
+      "Indecisos e Absentos %": "9.3",
+      "Vantagem": "7,1%"
+    },
     "2026 | Datafolha | 12 Mai - 14 Mai": {
       "Ano": "2026",
       "Contratante": "Datafolha",
