@@ -1,6 +1,28 @@
 {
-  "timestamp": "2026-05-20T09:42:21",
+  "timestamp": "2026-05-20T15:33:22",
   "records": {
+    "2026 | Vox Brasil | 17 Mai - 19 Mai": {
+      "Ano": "2026",
+      "Contratante": "Vox Brasil",
+      "Data(s) de Pesquisa": "17 Mai - 19 Mai",
+      "Tamanho da Amostra": "2100",
+      "Margem de Erro (pp)": "2.15",
+      "Lula (PT) %": "46.8",
+      "Flávio (PL) %": "38.1",
+      "Indecisos e Absentos %": "15.1",
+      "Vantagem": "8,7%"
+    },
+    "2026 | Vetor/Arrow | 15 Mai - 18 Mai": {
+      "Ano": "2026",
+      "Contratante": "Vetor/Arrow",
+      "Data(s) de Pesquisa": "15 Mai - 18 Mai",
+      "Tamanho da Amostra": "9000",
+      "Margem de Erro (pp)": "1.0",
+      "Lula (PT) %": "50.7",
+      "Flávio (PL) %": "38.3",
+      "Indecisos e Absentos %": "11.0",
+      "Vantagem": "12,4%"
+    },
     "2026 | AtlasIntel | 13 Mai - 18 Mai": {
       "Ano": "2026",
       "Contratante": "AtlasIntel",
