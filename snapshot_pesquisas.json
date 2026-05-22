@@ -1,6 +1,17 @@
 {
-  "timestamp": "2026-05-22T09:36:45",
+  "timestamp": "2026-05-22T14:48:08",
   "records": {
+    "2026 | Apex/Futura | 15 Mai - 20 Mai": {
+      "Ano": "2026",
+      "Contratante": "Apex/Futura",
+      "Data(s) de Pesquisa": "15 Mai - 20 Mai",
+      "Tamanho da Amostra": "2000",
+      "Margem de Erro (pp)": "2.2",
+      "Lula (PT) %": "47.7",
+      "Flávio (PL) %": "42.2",
+      "Indecisos e Absentos %": "10.2",
+      "Vantagem": "5,5%"
+    },
     "2026 | Vox Brasil | 17 Mai - 19 Mai": {
       "Ano": "2026",
       "Contratante": "Vox Brasil",
