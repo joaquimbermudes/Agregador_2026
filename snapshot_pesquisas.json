@@ -1,6 +1,17 @@
 {
-  "timestamp": "2026-05-22T19:53:52",
+  "timestamp": "2026-05-23T03:41:14",
   "records": {
+    "2026 | Datafolha | 20 Mai - 22 Mai": {
+      "Ano": "2026",
+      "Contratante": "Datafolha",
+      "Data(s) de Pesquisa": "20 Mai - 22 Mai",
+      "Tamanho da Amostra": "2004",
+      "Margem de Erro (pp)": "2.0",
+      "Lula (PT) %": "47.0",
+      "Flávio (PL) %": "43.0",
+      "Indecisos e Absentos %": "11.0",
+      "Vantagem": "4%"
+    },
     "2026 | Apex/Futura | 15 Mai - 20 Mai": {
       "Ano": "2026",
       "Contratante": "Apex/Futura",
