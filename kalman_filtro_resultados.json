@@ -1,24 +1,24 @@
 {
-  "timestamp": "2026-05-25T19:47:58",
-  "data_ultima_pesquisa": "2026-05-20",
-  "instituto_ultima_pesquisa": "Futura/Apex",
+  "timestamp": "2026-05-26T04:00:14",
+  "data_ultima_pesquisa": "2026-05-22",
+  "instituto_ultima_pesquisa": "Datafolha",
   "intencao_voto_flavio": {
-    "estimativa": 0.4715,
-    "ic95_lo": 0.4599,
-    "ic95_hi": 0.483
+    "estimativa": 0.4779,
+    "ic95_lo": 0.4662,
+    "ic95_hi": 0.4898
   },
   "intencao_voto_lula": {
-    "estimativa": 0.5285,
-    "ic95_lo": 0.517,
-    "ic95_hi": 0.5401
+    "estimativa": 0.5221,
+    "ic95_lo": 0.5102,
+    "ic95_hi": 0.5338
   },
   "probabilidade_vitoria": {
-    "flavio_acima_50pct": 0.0,
-    "lula_acima_50pct": 1.0
+    "flavio_acima_50pct": 0.0001,
+    "lula_acima_50pct": 0.9999
   },
   "estado_filtrado_logit": {
-    "x_final": -0.114305,
-    "P_final": 0.00055983,
-    "sigma": 0.02366071
+    "x_final": -0.088273,
+    "P_final": 0.0005831,
+    "sigma": 0.02414746
   }
 }

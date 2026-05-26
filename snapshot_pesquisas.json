@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-05-25T19:47:53",
+  "timestamp": "2026-05-26T04:00:10",
   "records": {
     "2026 | Nexus/BTG | 22 Mai - 24 Mai": {
       "Ano": "2026",
@@ -10,7 +10,18 @@
       "Lula (PT) %": "47.0",
       "Flávio (PL) %": "43.0",
       "Indecisos e Absentos %": "10.0",
-      "Vantagem": "4% |-"
+      "Vantagem": "4%"
+    },
+    "2026 | Datafolha | 20 Mai - 22 Mai": {
+      "Ano": "2026",
+      "Contratante": "Datafolha",
+      "Data(s) de Pesquisa": "20 Mai - 22 Mai",
+      "Tamanho da Amostra": "2004",
+      "Margem de Erro (pp)": "2.0",
+      "Lula (PT) %": "47.0",
+      "Flávio (PL) %": "43.0",
+      "Indecisos e Absentos %": "11.0",
+      "Vantagem": "4%"
     },
     "2026 | Gerp | 18 Mai - 21 Mai": {
       "Ano": "2026",
