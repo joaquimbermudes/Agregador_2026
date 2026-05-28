@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-05-28T04:02:04",
+  "timestamp": "2026-05-28T10:12:12",
   "records": {
     "2026 | Indexa | 22 Mai - 24 Mai": {
       "Ano": "2026",
@@ -7,10 +7,10 @@
       "Data(s) de Pesquisa": "22 Mai - 24 Mai",
       "Tamanho da Amostra": "2000",
       "Margem de Erro (pp)": "2.2",
-      "Lula (PT) %": "49.0",
+      "Lula (PT) %": "46.0",
       "Flávio (PL) %": "41.0",
       "Indecisos e Absentos %": "10.0",
-      "Vantagem": "8%"
+      "Vantagem": "5%"
     },
     "2026 | Nexus/BTG | 22 Mai - 24 Mai": {
       "Ano": "2026",
