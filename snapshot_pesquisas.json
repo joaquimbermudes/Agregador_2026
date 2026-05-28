@@ -1,6 +1,17 @@
 {
-  "timestamp": "2026-05-28T10:12:12",
+  "timestamp": "2026-05-28T16:09:52",
   "records": {
+    "2026 | Meio/Ideia | 23 Mai - 27 Mai": {
+      "Ano": "2026",
+      "Contratante": "Meio/Ideia",
+      "Data(s) de Pesquisa": "23 Mai - 27 Mai",
+      "Tamanho da Amostra": "1500",
+      "Margem de Erro (pp)": "2.5",
+      "Lula (PT) %": "46.5",
+      "Flávio (PL) %": "41.4",
+      "Indecisos e Absentos %": "12.2",
+      "Vantagem": "5,1%"
+    },
     "2026 | Indexa | 22 Mai - 24 Mai": {
       "Ano": "2026",
       "Contratante": "Indexa",
