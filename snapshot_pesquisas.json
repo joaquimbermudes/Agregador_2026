@@ -1,6 +1,17 @@
 {
-  "timestamp": "2026-05-29T10:02:02",
+  "timestamp": "2026-05-29T15:51:10",
   "records": {
+    "2026 | PoderData/Aya | 25 Mai - 28 Mai": {
+      "Ano": "2026",
+      "Contratante": "PoderData/Aya",
+      "Data(s) de Pesquisa": "25 Mai - 28 Mai",
+      "Tamanho da Amostra": "2400",
+      "Margem de Erro (pp)": "2.0",
+      "Lula (PT) %": "46.0",
+      "Flávio (PL) %": "42.0",
+      "Indecisos e Absentos %": "12.0",
+      "Vantagem": "4%"
+    },
     "2026 | Meio/Ideia | 23 Mai - 27 Mai": {
       "Ano": "2026",
       "Contratante": "Meio/Ideia",
