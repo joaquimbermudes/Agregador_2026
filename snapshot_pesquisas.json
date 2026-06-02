@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-06-02T16:41:59",
+  "timestamp": "2026-06-02T20:55:05",
   "records": {
     "2026 | Real Time Big Data | 29 Mai - 30 Mai": {
       "Ano": "2026",
@@ -33,6 +33,17 @@
       "Flávio (PL) %": "41.4",
       "Indecisos e Absentos %": "12.2",
       "Vantagem": "5,1%"
+    },
+    "2026 | Veritá | 22 Mai - 26 Mai": {
+      "Ano": "2026",
+      "Contratante": "Veritá",
+      "Data(s) de Pesquisa": "22 Mai - 26 Mai",
+      "Tamanho da Amostra": "3330",
+      "Margem de Erro (pp)": "2.0",
+      "Lula (PT) %": "46.8",
+      "Flávio (PL) %": "53.2",
+      "Indecisos e Absentos %": "nan",
+      "Vantagem": "6,4%"
     },
     "2026 | Indexa | 22 Mai - 24 Mai": {
       "Ano": "2026",
