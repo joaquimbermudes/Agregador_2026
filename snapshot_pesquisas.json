@@ -1,6 +1,17 @@
 {
-  "timestamp": "2026-06-05T15:14:05",
+  "timestamp": "2026-06-05T20:00:40",
   "records": {
+    "2026 | Vox Brasil | 1 Jun - 6 Jun": {
+      "Ano": "2026",
+      "Contratante": "Vox Brasil",
+      "Data(s) de Pesquisa": "1 Jun - 6 Jun",
+      "Tamanho da Amostra": "2100",
+      "Margem de Erro (pp)": "nan",
+      "Lula (PT) %": "47.8",
+      "Flávio (PL) %": "41.3",
+      "Indecisos e Absentos %": "10.9",
+      "Vantagem": "6,5%"
+    },
     "2026 | Real Time Big Data | 29 Mai - 30 Mai": {
       "Ano": "2026",
       "Contratante": "Real Time Big Data",
