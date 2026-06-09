@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-06-09T09:53:56",
+  "timestamp": "2026-06-09T15:14:34",
   "records": {
     "2026 | Vox Brasil | 1 Jun - 6 Jun": {
       "Ano": "2026",
@@ -11,6 +11,17 @@
       "Flávio (PL) %": "41.3",
       "Indecisos e Absentos %": "10.9",
       "Vantagem": "6,5%"
+    },
+    "2026 | Gerp | 2 Jun - 5 Jun": {
+      "Ano": "2026",
+      "Contratante": "Gerp",
+      "Data(s) de Pesquisa": "2 Jun - 5 Jun",
+      "Tamanho da Amostra": "2000",
+      "Margem de Erro (pp)": "nan",
+      "Lula (PT) %": "39.1",
+      "Flávio (PL) %": "44.7",
+      "Indecisos e Absentos %": "16.2",
+      "Vantagem": "5,6%"
     },
     "2026 | Real Time Big Data | 29 Mai - 30 Mai": {
       "Ano": "2026",
