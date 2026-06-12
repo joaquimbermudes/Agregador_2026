@@ -1,6 +1,17 @@
 {
-  "timestamp": "2026-06-12T15:25:13",
+  "timestamp": "2026-06-12T20:16:23",
   "records": {
+    "2026 | Alfa Inteligência | 5 Jun - 10 Jun": {
+      "Ano": "2026",
+      "Contratante": "Alfa Inteligência",
+      "Data(s) de Pesquisa": "5 Jun - 10 Jun",
+      "Tamanho da Amostra": "1400",
+      "Margem de Erro (pp)": "nan",
+      "Lula (PT) %": "44.0",
+      "Flávio (PL) %": "41.0",
+      "Indecisos e Absentos %": "15.0",
+      "Vantagem": "3%"
+    },
     "2026 | Quaest | 5 Jun - 8 Jun": {
       "Ano": "2026",
       "Contratante": "Quaest",
