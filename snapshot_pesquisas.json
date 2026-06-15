@@ -1,6 +1,17 @@
 {
-  "timestamp": "2026-06-15T12:25:48",
+  "timestamp": "2026-06-15T21:09:06",
   "records": {
+    "2026 | Nexus/BTG | 12 Jun - 14 Jun": {
+      "Ano": "2026",
+      "Contratante": "Nexus/BTG",
+      "Data(s) de Pesquisa": "12 Jun - 14 Jun",
+      "Tamanho da Amostra": "2017",
+      "Margem de Erro (pp)": "nan",
+      "Lula (PT) %": "49.0",
+      "Flávio (PL) %": "43.0",
+      "Indecisos e Absentos %": "9.0",
+      "Vantagem": "6%"
+    },
     "2026 | Alfa Inteligência | 5 Jun - 10 Jun": {
       "Ano": "2026",
       "Contratante": "Alfa Inteligência",
