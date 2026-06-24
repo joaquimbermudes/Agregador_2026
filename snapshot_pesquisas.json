@@ -1,6 +1,17 @@
 {
-  "timestamp": "2026-06-24T09:38:33",
+  "timestamp": "2026-06-24T14:40:15",
   "records": {
+    "2026 | Gerp | 15 Jun - 20 Jun": {
+      "Ano": "2026",
+      "Contratante": "Gerp",
+      "Data(s) de Pesquisa": "15 Jun - 20 Jun",
+      "Tamanho da Amostra": "2000",
+      "Margem de Erro (pp)": "2.19",
+      "Lula (PT) %": "40.0",
+      "Flávio (PL) %": "42.0",
+      "Indecisos e Absentos %": "18.3",
+      "Vantagem": "2%"
+    },
     "2026 | Datafolha | 17 Jun - 19 Jun": {
       "Ano": "2026",
       "Contratante": "Datafolha",
