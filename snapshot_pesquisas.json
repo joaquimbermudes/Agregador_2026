@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-06-26T04:06:45",
+  "timestamp": "2026-06-26T09:35:19",
   "records": {
     "2026 | Gerp | 15 Jun - 20 Jun": {
       "Ano": "2026",
@@ -22,6 +22,17 @@
       "Flávio (PL) %": "43.0",
       "Indecisos e Absentos %": "9.0",
       "Vantagem": "4%"
+    },
+    "2026 | American Analytics | 11 Jun - 15 Jun": {
+      "Ano": "2026",
+      "Contratante": "American Analytics",
+      "Data(s) de Pesquisa": "11 Jun - 15 Jun",
+      "Tamanho da Amostra": "2000",
+      "Margem de Erro (pp)": "2.2",
+      "Lula (PT) %": "45.0",
+      "Flávio (PL) %": "40.0",
+      "Indecisos e Absentos %": "15.0",
+      "Vantagem": "5"
     },
     "2026 | CTN/MDA | 10 Jun - 14 Jun": {
       "Ano": "2026",
