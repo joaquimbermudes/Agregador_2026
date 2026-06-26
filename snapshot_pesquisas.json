@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-06-26T09:35:19",
+  "timestamp": "2026-06-26T14:33:56",
   "records": {
     "2026 | Gerp | 15 Jun - 20 Jun": {
       "Ano": "2026",
@@ -11,6 +11,17 @@
       "Flávio (PL) %": "42.0",
       "Indecisos e Absentos %": "18.3",
       "Vantagem": "2%"
+    },
+    "2026 | Indexa | 18 Jun - 20 Jun": {
+      "Ano": "2026",
+      "Contratante": "Indexa",
+      "Data(s) de Pesquisa": "18 Jun - 20 Jun",
+      "Tamanho da Amostra": "2000",
+      "Margem de Erro (pp)": "2.2",
+      "Lula (PT) %": "47.0",
+      "Flávio (PL) %": "40.0",
+      "Indecisos e Absentos %": "13.0",
+      "Vantagem": "7%"
     },
     "2026 | Datafolha | 17 Jun - 19 Jun": {
       "Ano": "2026",
@@ -32,7 +43,7 @@
       "Lula (PT) %": "45.0",
       "Flávio (PL) %": "40.0",
       "Indecisos e Absentos %": "15.0",
-      "Vantagem": "5"
+      "Vantagem": "5%"
     },
     "2026 | CTN/MDA | 10 Jun - 14 Jun": {
       "Ano": "2026",
