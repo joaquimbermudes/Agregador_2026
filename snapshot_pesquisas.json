@@ -1,6 +1,17 @@
 {
-  "timestamp": "2026-06-29T11:08:36",
+  "timestamp": "2026-06-29T15:54:29",
   "records": {
+    "2026 | Nexus/BTG | 26 Jun - 28 Jun": {
+      "Ano": "2026",
+      "Contratante": "Nexus/BTG",
+      "Data(s) de Pesquisa": "26 Jun - 28 Jun",
+      "Tamanho da Amostra": "2009",
+      "Margem de Erro (pp)": "2.0",
+      "Lula (PT) %": "47.0",
+      "Flávio (PL) %": "44.0",
+      "Indecisos e Absentos %": "9.0",
+      "Vantagem": "3%"
+    },
     "2026 | Vox Brasil | 23 Jun - 25 Jun": {
       "Ano": "2026",
       "Contratante": "Vox Brasil",
