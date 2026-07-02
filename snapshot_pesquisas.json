@@ -1,6 +1,17 @@
 {
-  "timestamp": "2026-07-01T20:01:52",
+  "timestamp": "2026-07-02T03:57:24",
   "records": {
+    "2026 | Atlasinstel | 26 Jun - 30 Jun": {
+      "Ano": "2026",
+      "Contratante": "Atlasinstel",
+      "Data(s) de Pesquisa": "26 Jun - 30 Jun",
+      "Tamanho da Amostra": "4999",
+      "Margem de Erro (pp)": "1.0",
+      "Lula (PT) %": "48.8",
+      "Flávio (PL) %": "42.3",
+      "Indecisos e Absentos %": "8.9",
+      "Vantagem": "6,5%"
+    },
     "2026 | Nexus/BTG | 26 Jun - 28 Jun": {
       "Ano": "2026",
       "Contratante": "Nexus/BTG",
