@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-07-08T14:24:35",
+  "timestamp": "2026-07-08T19:39:12",
   "records": {
     "2026 | Gerp | 3 Jul - 7 Jul": {
       "Ano": "2026",
@@ -11,6 +11,17 @@
       "Flávio (PL) %": "45.0",
       "Indecisos e Absentos %": "13.0",
       "Vantagem": "3%"
+    },
+    "2026 | Meio/Ideia | 3 Jul - 6 Jul": {
+      "Ano": "2026",
+      "Contratante": "Meio/Ideia",
+      "Data(s) de Pesquisa": "3 Jul - 6 Jul",
+      "Tamanho da Amostra": "2000",
+      "Margem de Erro (pp)": "2.5",
+      "Lula (PT) %": "45.0",
+      "Flávio (PL) %": "40.0",
+      "Indecisos e Absentos %": "15.0",
+      "Vantagem": "5,0%"
     },
     "2026 | Atlasinstel | 26 Jun - 30 Jun": {
       "Ano": "2026",
