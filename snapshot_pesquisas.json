@@ -1,6 +1,17 @@
 {
-  "timestamp": "2026-07-13T14:43:47",
+  "timestamp": "2026-07-13T19:27:38",
   "records": {
+    "2026 | Nexus/BTG Pactual | 10 Jul - 12 Jul": {
+      "Ano": "2026",
+      "Contratante": "Nexus/BTG Pactual",
+      "Data(s) de Pesquisa": "10 Jul - 12 Jul",
+      "Tamanho da Amostra": "2003",
+      "Margem de Erro (pp)": "2.0",
+      "Lula (PT) %": "47.0",
+      "Flávio (PL) %": "44.0",
+      "Indecisos e Absentos %": "9.0",
+      "Vantagem": "3%"
+    },
     "2026 | Gerp | 3 Jul - 7 Jul": {
       "Ano": "2026",
       "Contratante": "Gerp",
