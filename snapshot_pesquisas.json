@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-07-14T13:53:57",
+  "timestamp": "2026-07-14T19:25:18",
   "records": {
     "2026 | Nexus/BTG Pactual | 10 Jul - 12 Jul": {
       "Ano": "2026",
@@ -11,6 +11,17 @@
       "Flávio (PL) %": "44.0",
       "Indecisos e Absentos %": "9.0",
       "Vantagem": "3%"
+    },
+    "2026 | Futura/Apex | 7 Jul - 11 Jul": {
+      "Ano": "2026",
+      "Contratante": "Futura/Apex",
+      "Data(s) de Pesquisa": "7 Jul - 11 Jul",
+      "Tamanho da Amostra": "2000",
+      "Margem de Erro (pp)": "2.2",
+      "Lula (PT) %": "46.3",
+      "Flávio (PL) %": "46.1",
+      "Indecisos e Absentos %": "7.6",
+      "Vantagem": "0,2%"
     },
     "2026 | Gerp | 3 Jul - 7 Jul": {
       "Ano": "2026",
