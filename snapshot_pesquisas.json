@@ -1,6 +1,17 @@
 {
-  "timestamp": "2026-07-15T19:17:35",
+  "timestamp": "2026-07-16T02:53:58",
   "records": {
+    "2026 | Quaest | 10 Jul - 13 Jul": {
+      "Ano": "2026",
+      "Contratante": "Quaest",
+      "Data(s) de Pesquisa": "10 Jul - 13 Jul",
+      "Tamanho da Amostra": "2004",
+      "Margem de Erro (pp)": "2.0",
+      "Lula (PT) %": "45.0",
+      "Flávio (PL) %": "37.0",
+      "Indecisos e Absentos %": "18.0",
+      "Vantagem": "8%"
+    },
     "2026 | Nexus/BTG Pactual | 10 Jul - 12 Jul": {
       "Ano": "2026",
       "Contratante": "Nexus/BTG Pactual",
