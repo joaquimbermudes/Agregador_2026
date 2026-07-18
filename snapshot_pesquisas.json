@@ -1,15 +1,15 @@
 {
-  "timestamp": "2026-07-17T19:16:24",
+  "timestamp": "2026-07-18T02:49:06",
   "records": {
-    "2026 | PoderData/Aya | 12 Jul-15 Jul": {
+    "2026 | PoderData/Aya | 12 Jul - 15 Jul": {
       "Ano": "2026",
       "Contratante": "PoderData/Aya",
-      "Data(s) de Pesquisa": "12 Jul-15 Jul",
+      "Data(s) de Pesquisa": "12 Jul - 15 Jul",
       "Tamanho da Amostra": "2400",
       "Margem de Erro (pp)": "2.0",
       "Lula (PT) %": "45.0",
       "Flávio (PL) %": "43.0",
-      "Indecisos e Absentos %": "10.0",
+      "Indecisos e Absentos %": "12.0",
       "Vantagem": "2%"
     },
     "2026 | Quaest | 10 Jul - 13 Jul": {
