@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-07-22T08:35:02",
+  "timestamp": "2026-07-22T14:05:04",
   "records": {
     "2026 | Real Time Big Data | 18 Jul - 20 Jul": {
       "Ano": "2026",
@@ -22,6 +22,17 @@
       "Flávio (PL) %": "39.0",
       "Indecisos e Absentos %": "15.0",
       "Vantagem": "7%"
+    },
+    "2026 | Gerp | 15 Jul - 17 Jul": {
+      "Ano": "2026",
+      "Contratante": "Gerp",
+      "Data(s) de Pesquisa": "15 Jul - 17 Jul",
+      "Tamanho da Amostra": "2000",
+      "Margem de Erro (pp)": "2.19",
+      "Lula (PT) %": "45.0",
+      "Flávio (PL) %": "46.0",
+      "Indecisos e Absentos %": "9.0",
+      "Vantagem": "1%"
     },
     "2026 | PoderData/Aya | 12 Jul - 15 Jul": {
       "Ano": "2026",
