@@ -1,6 +1,17 @@
 {
-  "timestamp": "2026-07-24T19:34:55",
+  "timestamp": "2026-07-25T02:57:19",
   "records": {
+    "2026 | Datafolha | 22 Jul - 24 Jul": {
+      "Ano": "2026",
+      "Contratante": "Datafolha",
+      "Data(s) de Pesquisa": "22 Jul - 24 Jul",
+      "Tamanho da Amostra": "2004",
+      "Margem de Erro (pp)": "2.0",
+      "Lula (PT) %": "48.0",
+      "Flávio (PL) %": "43.0",
+      "Indecisos e Absentos %": "10.0",
+      "Vantagem": "5%"
+    },
     "2026 | Real Time Big Data | 18 Jul - 20 Jul": {
       "Ano": "2026",
       "Contratante": "Real Time Big Data",
