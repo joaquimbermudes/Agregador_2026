@@ -1,6 +1,17 @@
 {
-  "timestamp": "2026-07-27T09:58:39",
+  "timestamp": "2026-07-27T14:44:46",
   "records": {
+    "2026 | Nexus/BTG | 24 Jul - 26 Jul": {
+      "Ano": "2026",
+      "Contratante": "Nexus/BTG",
+      "Data(s) de Pesquisa": "24 Jul - 26 Jul",
+      "Tamanho da Amostra": "2004",
+      "Margem de Erro (pp)": "2.0",
+      "Lula (PT) %": "47.0",
+      "Flávio (PL) %": "43.0",
+      "Indecisos e Absentos %": "10.0",
+      "Vantagem": "4%"
+    },
     "2026 | Datafolha | 22 Jul - 24 Jul": {
       "Ano": "2026",
       "Contratante": "Datafolha",
