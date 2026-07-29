@@ -1,6 +1,17 @@
 {
-  "timestamp": "2026-07-29T14:19:57",
+  "timestamp": "2026-07-29T19:22:52",
   "records": {
+    "2026 | AtlasIntel | 22 Jul - 27 Jul": {
+      "Ano": "2026",
+      "Contratante": "AtlasIntel",
+      "Data(s) de Pesquisa": "22 Jul - 27 Jul",
+      "Tamanho da Amostra": "5021",
+      "Margem de Erro (pp)": "1.0",
+      "Lula (PT) %": "49.2",
+      "Flávio (PL) %": "42.9",
+      "Indecisos e Absentos %": "7.9",
+      "Vantagem": "6,3%"
+    },
     "2026 | Nexus/BTG | 24 Jul - 26 Jul": {
       "Ano": "2026",
       "Contratante": "Nexus/BTG",
