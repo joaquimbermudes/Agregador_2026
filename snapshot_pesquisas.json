@@ -1,6 +1,17 @@
 {
-  "timestamp": "2026-07-30T14:11:01",
+  "timestamp": "2026-07-30T19:39:16",
   "records": {
+    "2026 | PoderData | 26 Jul - 28 Jul": {
+      "Ano": "2026",
+      "Contratante": "PoderData",
+      "Data(s) de Pesquisa": "26 Jul - 28 Jul",
+      "Tamanho da Amostra": "2400",
+      "Margem de Erro (pp)": "2.0",
+      "Lula (PT) %": "46.0",
+      "Flávio (PL) %": "43.0",
+      "Indecisos e Absentos %": "11.0",
+      "Vantagem": "3%"
+    },
     "2026 | AtlasIntel | 22 Jul - 27 Jul": {
       "Ano": "2026",
       "Contratante": "AtlasIntel",
