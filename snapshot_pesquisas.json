@@ -1,6 +1,17 @@
 {
-  "timestamp": "2026-07-31T19:40:08",
+  "timestamp": "2026-08-01T03:22:19",
   "records": {
+    "2026 | Vox Brasil | 26 Jul - 28 Jul": {
+      "Ano": "2026",
+      "Contratante": "Vox Brasil",
+      "Data(s) de Pesquisa": "26 Jul - 28 Jul",
+      "Tamanho da Amostra": "2100",
+      "Margem de Erro (pp)": "2.15",
+      "Lula (PT) %": "47.5",
+      "Flávio (PL) %": "41.1",
+      "Indecisos e Absentos %": "11.4",
+      "Vantagem": "6,4%"
+    },
     "2026 | PoderData | 26 Jul - 28 Jul": {
       "Ano": "2026",
       "Contratante": "PoderData",
@@ -11,6 +22,17 @@
       "Flávio (PL) %": "43.0",
       "Indecisos e Absentos %": "11.0",
       "Vantagem": "3%"
+    },
+    "2026 | Alfa/TMC | 23 Jul - 28 Jul": {
+      "Ano": "2026",
+      "Contratante": "Alfa/TMC",
+      "Data(s) de Pesquisa": "23 Jul - 28 Jul",
+      "Tamanho da Amostra": "2700",
+      "Margem de Erro (pp)": "1.8",
+      "Lula (PT) %": "48.0",
+      "Flávio (PL) %": "41.0",
+      "Indecisos e Absentos %": "11.0",
+      "Vantagem": "7%"
     },
     "2026 | AtlasIntel | 22 Jul - 27 Jul": {
       "Ano": "2026",
