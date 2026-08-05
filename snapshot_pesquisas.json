@@ -1,6 +1,17 @@
 {
-  "timestamp": "2026-08-05T14:19:08",
+  "timestamp": "2026-08-05T19:40:55",
   "records": {
+    "2026 | Meio/Ideia | 31 Jul - 3 Ago": {
+      "Ano": "2026",
+      "Contratante": "Meio/Ideia",
+      "Data(s) de Pesquisa": "31 Jul - 3 Ago",
+      "Tamanho da Amostra": "1500",
+      "Margem de Erro (pp)": "2.5",
+      "Lula (PT) %": "48.5",
+      "Flávio (PL) %": "43.0",
+      "Indecisos e Absentos %": "8.5",
+      "Vantagem": "5,5%"
+    },
     "2026 | Genial/Quaest | 31 Jul - 3 Ago": {
       "Ano": "2026",
       "Contratante": "Genial/Quaest",
