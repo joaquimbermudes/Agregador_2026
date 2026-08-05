@@ -1,10 +1,21 @@
 {
-  "timestamp": "2026-08-05T08:42:04",
+  "timestamp": "2026-08-05T14:19:08",
   "records": {
-    "2026 | Nexus/BTG Pactual | 21 Jul - 2 Ago": {
+    "2026 | Genial/Quaest | 31 Jul - 3 Ago": {
+      "Ano": "2026",
+      "Contratante": "Genial/Quaest",
+      "Data(s) de Pesquisa": "31 Jul - 3 Ago",
+      "Tamanho da Amostra": "2004",
+      "Margem de Erro (pp)": "2.0",
+      "Lula (PT) %": "44.0",
+      "Flávio (PL) %": "39.0",
+      "Indecisos e Absentos %": "17.0",
+      "Vantagem": "5%"
+    },
+    "2026 | Nexus/BTG Pactual | 31 Jul - 2 Ago": {
       "Ano": "2026",
       "Contratante": "Nexus/BTG Pactual",
-      "Data(s) de Pesquisa": "21 Jul - 2 Ago",
+      "Data(s) de Pesquisa": "31 Jul - 2 Ago",
       "Tamanho da Amostra": "2002",
       "Margem de Erro (pp)": "2.0",
       "Lula (PT) %": "46.0",
