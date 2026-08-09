@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-08-08T18:42:45",
+  "timestamp": "2026-08-09T02:01:29",
   "records": {
     "2026 | Meio/Ideia | 31 Jul - 3 Ago": {
       "Ano": "2026",
@@ -45,9 +45,9 @@
       "Indecisos e Absentos %": "11.4",
       "Vantagem": "6,4%"
     },
-    "2026 | PoderData | 26 Jul - 28 Jul": {
+    "2026 | PoderData/Aya | 26 Jul - 28 Jul": {
       "Ano": "2026",
-      "Contratante": "PoderData",
+      "Contratante": "PoderData/Aya",
       "Data(s) de Pesquisa": "26 Jul - 28 Jul",
       "Tamanho da Amostra": "2400",
       "Margem de Erro (pp)": "2.0",
