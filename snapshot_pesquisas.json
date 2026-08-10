@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-08-10T13:17:27",
+  "timestamp": "2026-08-10T19:02:29",
   "records": {
     "2026 | Nexus/BTG Pactual | 7 Ago - 9 Ago": {
       "Ano": "2026",
@@ -11,6 +11,17 @@
       "Flávio (PL) %": "44.0",
       "Indecisos e Absentos %": "9.0",
       "Vantagem": "3%"
+    },
+    "2026 | Palver | 3 Ago - 7 Ago": {
+      "Ano": "2026",
+      "Contratante": "Palver",
+      "Data(s) de Pesquisa": "3 Ago - 7 Ago",
+      "Tamanho da Amostra": "5000",
+      "Margem de Erro (pp)": "3.0",
+      "Lula (PT) %": "46.0",
+      "Flávio (PL) %": "46.0",
+      "Indecisos e Absentos %": "8.0",
+      "Vantagem": "0%"
     },
     "2026 | Meio/Ideia | 31 Jul - 3 Ago": {
       "Ano": "2026",
