@@ -1,6 +1,17 @@
 {
-  "timestamp": "2026-08-10T07:48:28",
+  "timestamp": "2026-08-10T13:17:27",
   "records": {
+    "2026 | Nexus/BTG Pactual | 7 Ago - 9 Ago": {
+      "Ano": "2026",
+      "Contratante": "Nexus/BTG Pactual",
+      "Data(s) de Pesquisa": "7 Ago - 9 Ago",
+      "Tamanho da Amostra": "2001",
+      "Margem de Erro (pp)": "2.0",
+      "Lula (PT) %": "47.0",
+      "Flávio (PL) %": "44.0",
+      "Indecisos e Absentos %": "9.0",
+      "Vantagem": "3%"
+    },
     "2026 | Meio/Ideia | 31 Jul - 3 Ago": {
       "Ano": "2026",
       "Contratante": "Meio/Ideia",
