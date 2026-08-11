@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-08-11T13:14:22",
+  "timestamp": "2026-08-11T19:06:34",
   "records": {
     "2026 | Gerp | 6 Ago - 10 Ago": {
       "Ano": "2026",
@@ -22,6 +22,17 @@
       "Flávio (PL) %": "44.0",
       "Indecisos e Absentos %": "9.0",
       "Vantagem": "3%"
+    },
+    "2026 | CNT/MDA | 5 Ago - 9 Ago": {
+      "Ano": "2026",
+      "Contratante": "CNT/MDA",
+      "Data(s) de Pesquisa": "5 Ago - 9 Ago",
+      "Tamanho da Amostra": "2002",
+      "Margem de Erro (pp)": "2.2",
+      "Lula (PT) %": "48.0",
+      "Flávio (PL) %": "39.1",
+      "Indecisos e Absentos %": "12.9",
+      "Vantagem": "8,9%"
     },
     "2026 | Apex/Futura | 3 Ago - 7 Ago": {
       "Ano": "2026",
