@@ -1,6 +1,17 @@
 {
-  "timestamp": "2026-08-11T07:13:53",
+  "timestamp": "2026-08-11T13:14:22",
   "records": {
+    "2026 | Gerp | 6 Ago - 10 Ago": {
+      "Ano": "2026",
+      "Contratante": "Gerp",
+      "Data(s) de Pesquisa": "6 Ago - 10 Ago",
+      "Tamanho da Amostra": "2400",
+      "Margem de Erro (pp)": "2.0",
+      "Lula (PT) %": "43.0",
+      "Flávio (PL) %": "45.0",
+      "Indecisos e Absentos %": "12.0",
+      "Vantagem": "2%"
+    },
     "2026 | Nexus/BTG Pactual | 7 Ago - 9 Ago": {
       "Ano": "2026",
       "Contratante": "Nexus/BTG Pactual",
@@ -11,6 +22,17 @@
       "Flávio (PL) %": "44.0",
       "Indecisos e Absentos %": "9.0",
       "Vantagem": "3%"
+    },
+    "2026 | Apex/Futura | 3 Ago - 7 Ago": {
+      "Ano": "2026",
+      "Contratante": "Apex/Futura",
+      "Data(s) de Pesquisa": "3 Ago - 7 Ago",
+      "Tamanho da Amostra": "2000",
+      "Margem de Erro (pp)": "2.2",
+      "Lula (PT) %": "46.5",
+      "Flávio (PL) %": "44.0",
+      "Indecisos e Absentos %": "9.5",
+      "Vantagem": "2,5%"
     },
     "2026 | Palver | 3 Ago - 7 Ago": {
       "Ano": "2026",
