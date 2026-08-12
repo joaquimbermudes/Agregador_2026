@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-08-11T19:06:34",
+  "timestamp": "2026-08-12T02:15:32",
   "records": {
     "2026 | Gerp | 6 Ago - 10 Ago": {
       "Ano": "2026",
@@ -221,9 +221,9 @@
       "Indecisos e Absentos %": "9.0",
       "Vantagem": "3%"
     },
-    "2026 | Futura/Apex | 7 Jul - 11 Jul": {
+    "2026 | Apex/Futura | 7 Jul - 11 Jul": {
       "Ano": "2026",
-      "Contratante": "Futura/Apex",
+      "Contratante": "Apex/Futura",
       "Data(s) de Pesquisa": "7 Jul - 11 Jul",
       "Tamanho da Amostra": "2000",
       "Margem de Erro (pp)": "2.2",
@@ -342,9 +342,9 @@
       "Indecisos e Absentos %": "15.0",
       "Vantagem": "5%"
     },
-    "2026 | CTN/MDA | 10 Jun - 14 Jun": {
+    "2026 | CNT/MDA | 10 Jun - 14 Jun": {
       "Ano": "2026",
-      "Contratante": "CTN/MDA",
+      "Contratante": "CNT/MDA",
       "Data(s) de Pesquisa": "10 Jun - 14 Jun",
       "Tamanho da Amostra": "2002",
       "Margem de Erro (pp)": "2.2",
@@ -364,9 +364,9 @@
       "Indecisos e Absentos %": "9.0",
       "Vantagem": "6%"
     },
-    "2026 | Futura/Apex | 8 Jun - 12 Jun": {
+    "2026 | Apex/Futura | 8 Jun - 12 Jun": {
       "Ano": "2026",
-      "Contratante": "Futura/Apex",
+      "Contratante": "Apex/Futura",
       "Data(s) de Pesquisa": "8 Jun - 12 Jun",
       "Tamanho da Amostra": "2000",
       "Margem de Erro (pp)": "2.2",
@@ -991,9 +991,9 @@
       "Indecisos e Absentos %": "18.0",
       "Vantagem": "10%"
     },
-    "2025 | Futura/Apex | 03 Dez - 09 Dez": {
+    "2025 | Apex/Futura | 03 Dez - 09 Dez": {
       "Ano": "2025",
-      "Contratante": "Futura/Apex",
+      "Contratante": "Apex/Futura",
       "Data(s) de Pesquisa": "03 Dez - 09 Dez",
       "Tamanho da Amostra": "2001",
       "Margem de Erro (pp)": "2.0",
