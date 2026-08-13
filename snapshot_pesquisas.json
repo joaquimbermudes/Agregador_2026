@@ -1,6 +1,17 @@
 {
-  "timestamp": "2026-08-13T07:39:56",
+  "timestamp": "2026-08-13T13:20:11",
   "records": {
+    "2026 | PoderData/Aya | 9 Ago - 12 Ago": {
+      "Ano": "2026",
+      "Contratante": "PoderData/Aya",
+      "Data(s) de Pesquisa": "9 Ago - 12 Ago",
+      "Tamanho da Amostra": "2400",
+      "Margem de Erro (pp)": "2.0",
+      "Lula (PT) %": "46.0",
+      "Flávio (PL) %": "45.0",
+      "Indecisos e Absentos %": "9.0",
+      "Vantagem": "1%"
+    },
     "2026 | Gerp | 6 Ago - 10 Ago": {
       "Ano": "2026",
       "Contratante": "Gerp",
