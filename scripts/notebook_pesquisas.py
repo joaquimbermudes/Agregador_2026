@@ -1,7 +1,9 @@
 # =============================================================================
-# NOTEBOOK UNIFICADO – Pesquisas 2º Turno Lula × Flávio Bolsonaro
+# NOTEBOOK UNIFICADO – Pesquisas com Lula e Flávio Bolsonaro
 # =============================================================================
-# Cole cada bloco em uma célula separada do Jupyter e execute em ordem.
+# Extrai todos os cenários de primeiro e segundo turno da página da Wikipédia
+# em que Lula e Flávio aparecem simultaneamente, sem restringir institutos.
+# Os demais candidatos são consolidados na coluna "Outros %".
 # =============================================================================
 
 
@@ -9,367 +11,547 @@
 # CÉLULA 1 — Imports e configurações
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+from __future__ import annotations
+
 import json
 import re
+import sys
 import unicodedata
-from pathlib import Path
 from datetime import datetime
+from io import StringIO
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 
-# ── Configurações do Bloco 1 (scraper) ──────────────────────────────────────
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
 
 URL = (
     "https://pt.wikipedia.org/wiki/"
     "Pesquisas_de_opini%C3%A3o_para_a_elei%C3%A7%C3%A3o_presidencial_no_Brasil_em_2026"
 )
 
-# Deixe None para buscar online; informe o caminho para usar arquivo local:
+# Deixe None para buscar online; informe um HTML local para trabalhar offline.
 LOCAL_FILE = None
-# LOCAL_FILE = r"C:\Users\joaqu\Downloads\Wikipedia.txt"
-
-TARGET_H3   = "Lula e Flávio Bolsonaro"
-TARGET_YEARS = ["2026", "2025"]
 SNAPSHOT_FILE = "snapshot_pesquisas.json"
 
-COLUMN_NAMES = [
-    "Contratante", "Data(s) de Pesquisa", "Tamanho da Amostra",
-    "Margem de Erro (pp)", "Lula (PT) %", "Flávio (PL) %",
-    "Indecisos e Absentos %", "Vantagem",
-]
-KEY_COLS = ["Ano", "Contratante", "Data(s) de Pesquisa"]
-
-# ── Configurações do Bloco 2 (normalização) ──────────────────────────────────
-
-# Institutos a manter (Futura/Apex e Apex/Futura são o mesmo instituto)
-INSTITUTOS_ALVO = [
-    "Datafolha",
-    "Paraná Pesquisas",
-    "Genial/Quaest",
-    "AtlasIntel",
-    "Futura/Apex",
-    "Apex/Futura",
+OUTPUT_COLUMNS = [
+    "Ano",
+    "Turno",
+    "Contratante",
+    "Data(s) de Pesquisa",
+    "Tamanho da Amostra",
+    "Margem de Erro (pp)",
+    "Lula (PT) %",
+    "Flávio (PL) %",
+    "Outros %",
+    "Indecisos e Abstenções %",
+    "Cenário",
 ]
 
-COLUNAS_EXIBICAO = [
-    "Ano", "Contratante", "Data(s) de Pesquisa", "Tamanho da Amostra",
-    "Lula (PT) %", "Flávio (PL) %", "Indecisos e Absentos %",
-    "Lula Norm %", "Flávio Norm %", "Desvio Padrão Flávio",
+COLUNAS_EXIBICAO = OUTPUT_COLUMNS + [
+    "Respostas Válidas %",
+    "Lula entre Válidos %",
+    "Flávio entre Válidos %",
+    "Outros entre Válidos %",
+    "Desvio Padrão Flávio",
 ]
+
+_MONTH_PATTERN = re.compile(
+    r"\b(?:jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)\b",
+    flags=re.IGNORECASE,
+)
 
 print("✅  Configurações carregadas.")
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# CÉLULA 2 — Funções do Bloco 1 (scraper)
+# CÉLULA 2 — Funções de aquisição e interpretação das tabelas
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-def _normalize(text):
-    return re.sub(r"\s+", " ", unicodedata.normalize("NFKC", text)).strip()
+def _normalize(text) -> str:
+    return re.sub(r"\s+", " ", unicodedata.normalize("NFKC", str(text))).strip()
 
-def _cell_text(td):
-    return _normalize(td.get_text(separator=" "))
 
-def _clean_ref(text):
-    return re.sub(r"\[\s*\d+\s*\]", "", text).strip()
+def _ascii_key(text) -> str:
+    normalized = unicodedata.normalize("NFKD", _normalize(text))
+    return "".join(char for char in normalized if not unicodedata.combining(char)).lower()
+
+
+def _clean_ref(text) -> str:
+    text = re.sub(r"\[\s*[\w\-]+\s*\]", "", _normalize(text))
+    return re.sub(r"\s+", " ", text).strip()
+
 
 def _fetch_url(url):
-    headers = {"User-Agent": "Mozilla/5.0 (compatible; ElectionPollScraper/1.0)"}
-    resp = requests.get(url, headers=headers, timeout=30)
-    resp.raise_for_status()
-    return BeautifulSoup(resp.text, "html.parser")
+    headers = {"User-Agent": "Mozilla/5.0 (compatible; ElectionPollScraper/2.0)"}
+    response = requests.get(url, headers=headers, timeout=45)
+    response.raise_for_status()
+    return BeautifulSoup(response.text, "html.parser")
+
 
 def _fetch_file(path):
     return BeautifulSoup(Path(path).read_text(encoding="utf-8"), "html.parser")
 
-def find_target_section(soup, h3_text):
-    for h3 in soup.find_all("h3"):
-        if _normalize(h3.get_text()) == _normalize(h3_text):
-            section = h3.find_parent("section")
-            if section:
-                return section
+
+def _previous_heading(table, name: str):
+    return table.find_previous(name)
+
+
+def _table_context(table) -> tuple[str | None, str | None]:
+    """Obtém turno e ano pelos cabeçalhos que antecedem a tabela."""
+    h2 = _previous_heading(table, "h2")
+    h2_key = _ascii_key(h2.get_text(" ", strip=True)) if h2 else ""
+    if "primeiro turno" in h2_key:
+        turno = "Primeiro turno"
+    elif "segundo turno" in h2_key:
+        turno = "Segundo turno"
+    else:
+        return None, None
+
+    year = None
+    for heading in table.find_all_previous(["h3", "h4", "h5"]):
+        match = re.fullmatch(r"\s*(20\d{2})(?:\s+\d+)?\s*", _normalize(heading.get_text(" ")))
+        if match:
+            year = match.group(1)
+            break
+    return turno, year
+
+
+def _read_table(table) -> pd.DataFrame:
+    """
+    Lê a grade sem promover cabeçalhos automaticamente.
+
+    ``read_html`` expande rowspans; assim, uma pesquisa com vários cenários
+    conserva contratante, datas e amostra em todas as linhas.
+    """
+    frames = pd.read_html(
+        StringIO(str(table)),
+        header=None,
+        keep_default_na=False,
+        displayed_only=False,
+        decimal=",",
+        thousands=None,
+    )
+    return frames[0] if frames else pd.DataFrame()
+
+
+def _column_label(column) -> str:
+    """Reduz colunas simples/MultiIndex ao nível semanticamente informativo."""
+    parts = column if isinstance(column, tuple) else (column,)
+    useful = []
+    for part in parts:
+        text = _normalize(part)
+        key = _ascii_key(text)
+        if not text or key.startswith("unnamed") or key == "nan":
+            continue
+        if text not in useful:
+            useful.append(text)
+    return useful[-1] if useful else ""
+
+
+def _columns_contain_candidates(grid: pd.DataFrame) -> bool:
+    labels = [_ascii_key(_column_label(column)) for column in grid.columns]
+    return (
+        any(re.search(r"\blula\b", label) for label in labels)
+        and any(re.search(r"\bflavio\b", label) for label in labels)
+    )
+
+
+def _find_candidate_header(grid: pd.DataFrame) -> int | None:
+    for index in range(min(len(grid), 8)):
+        values = [_ascii_key(value) for value in grid.iloc[index].tolist()]
+        has_lula = any(re.search(r"\blula\b", value) for value in values)
+        has_flavio = any(re.search(r"\bflavio\b", value) for value in values)
+        if has_lula and has_flavio:
+            return index
     return None
 
-def find_year_tables(section, years):
-    result = {}
-    for h4 in section.find_all("h4"):
-        yt = _normalize(h4.get_text())
-        for y in years:
-            if re.fullmatch(rf"{y}(?:\s+\d+)?", yt) and y not in result:
-                sub = h4.find_parent("section") or h4.parent
-                tbl = sub.find("table", class_="wikitable")
-                if tbl:
-                    result[y] = tbl
-    return result
 
-def parse_table(table, year):
-    rows_data = []
-    for tr in table.find_all("tr"):
-        cells = tr.find_all(["td", "th"])
-        if all(c.name == "th" for c in cells):
+def _classify_header(text: str) -> str:
+    key = _ascii_key(text)
+    if "contratante" in key or key == "pesquisa":
+        return "contractor"
+    if "data" in key and "pesquis" in key:
+        return "date"
+    if "tamanho" in key and "amostra" in key:
+        return "sample"
+    if "margem" in key and "erro" in key:
+        return "margin"
+    if re.search(r"\blula\b", key):
+        return "lula"
+    if re.search(r"\bflavio\b", key):
+        return "flavio"
+    if "indecis" in key or "abst" in key:
+        return "undecided"
+    if re.search(r"\boutros?\b", key):
+        return "reported_other"
+    if "vantagem" in key:
+        return "advantage"
+    if not key or key.startswith("unnamed") or key == "nan":
+        return "empty"
+    return "candidate"
+
+
+def _header_map(grid: pd.DataFrame, candidate_header: int | None) -> dict:
+    """Mapeia semanticamente cada coluna, mesmo com cabeçalho multinível."""
+    if candidate_header is None:
+        return {
+            column: {
+                "kind": _classify_header(_column_label(column)),
+                "label": _clean_ref(_column_label(column)),
+            }
+            for column in grid.columns
+        }
+
+    generic_row = grid.iloc[0]
+    candidate_row = grid.iloc[candidate_header]
+    mapping = {}
+    for column in grid.columns:
+        candidate_text = _normalize(candidate_row[column])
+        generic_text = _normalize(generic_row[column])
+        candidate_kind = _classify_header(candidate_text)
+        generic_kind = _classify_header(generic_text)
+
+        if candidate_kind not in {"empty", "candidate"}:
+            kind, label = candidate_kind, candidate_text
+        elif candidate_kind == "candidate":
+            kind, label = "candidate", candidate_text
+        else:
+            kind, label = generic_kind, generic_text
+        mapping[column] = {"kind": kind, "label": _clean_ref(label)}
+    return mapping
+
+
+def _column_by_kind(mapping: dict, kind: str):
+    return next((column for column, info in mapping.items() if info["kind"] == kind), None)
+
+
+def _parse_number(value) -> float:
+    if value is None or isinstance(value, bool):
+        return np.nan
+    if isinstance(value, (int, float, np.integer, np.floating)):
+        return float(value) if np.isfinite(value) else np.nan
+    text = _clean_ref(value).replace("−", "-").replace("—", "-").replace("–", "-")
+    if text.strip() in {"", "-", "nan", "NaN"}:
+        return np.nan
+    match = re.search(r"-?\d+(?:[.,]\d+)?", text.replace("\xa0", " "))
+    return float(match.group(0).replace(",", ".")) if match else np.nan
+
+
+def _parse_sample(value) -> int | None:
+    if isinstance(value, (int, np.integer)):
+        return int(value) if value > 0 else None
+    if isinstance(value, (float, np.floating)):
+        return int(value) if np.isfinite(value) and value > 0 else None
+    digits = re.sub(r"\D", "", _clean_ref(value))
+    return int(digits) if digits else None
+
+
+def _valid_date_label(value) -> bool:
+    return bool(_MONTH_PATTERN.search(_ascii_key(value)))
+
+
+def _scenario_label(row, mapping: dict) -> str:
+    labels = []
+    for column, info in mapping.items():
+        if info["kind"] not in {"lula", "flavio", "candidate"}:
             continue
-        if len(cells) == 1 and cells[0].get("colspan"):
+        if np.isfinite(_parse_number(row[column])):
+            labels.append(info["label"])
+    return " × ".join(dict.fromkeys(labels))
+
+
+def parse_poll_table(table, table_index: int) -> list[dict]:
+    """Extrai somente cenários que contenham Lula e Flávio simultaneamente."""
+    turno, year = _table_context(table)
+    if turno is None or year is None:
+        return []
+
+    grid = _read_table(table)
+    if grid.empty:
+        return []
+    headers_in_columns = _columns_contain_candidates(grid)
+    header_index = None if headers_in_columns else _find_candidate_header(grid)
+    if not headers_in_columns and header_index is None:
+        return []
+    mapping = _header_map(grid, header_index)
+
+    required = {
+        kind: _column_by_kind(mapping, kind)
+        for kind in ("contractor", "date", "sample", "margin", "lula", "flavio")
+    }
+    if any(column is None for column in required.values()):
+        return []
+
+    undecided_column = _column_by_kind(mapping, "undecided")
+    reported_other_column = _column_by_kind(mapping, "reported_other")
+    other_candidate_columns = [
+        column for column, info in mapping.items() if info["kind"] == "candidate"
+    ]
+
+    records = []
+    body_start = 0 if headers_in_columns else header_index + 1
+    for _, row in grid.iloc[body_start:].iterrows():
+        contractor = _clean_ref(row[required["contractor"]])
+        date_label = _clean_ref(row[required["date"]])
+        sample = _parse_sample(row[required["sample"]])
+        lula = _parse_number(row[required["lula"]])
+        flavio = _parse_number(row[required["flavio"]])
+
+        # Elimina cabeçalhos repetidos, efemérides e cenários sem um dos dois.
+        if (
+            not contractor
+            or "contratante" in _ascii_key(contractor)
+            or _valid_date_label(contractor)
+            or not _valid_date_label(date_label)
+            or sample is None or sample < 100
+            or not np.isfinite(lula)
+            or not np.isfinite(flavio)
+            or not (0.0 <= lula <= 100.0)
+            or not (0.0 <= flavio <= 100.0)
+        ):
             continue
-        texts = [_cell_text(c) for c in cells]
-        if not texts or texts[0].lower().startswith("contratante"):
+
+        reported_other = (
+            _parse_number(row[reported_other_column])
+            if reported_other_column is not None else np.nan
+        )
+        other_values = [
+            _parse_number(row[column]) for column in other_candidate_columns
+        ]
+        outros = sum(value for value in other_values if np.isfinite(value))
+        if np.isfinite(reported_other):
+            outros += reported_other
+        undecided = (
+            _parse_number(row[undecided_column])
+            if undecided_column is not None else np.nan
+        )
+        declared_total = lula + flavio + outros + (undecided if np.isfinite(undecided) else 0.0)
+        if not (70.0 <= declared_total <= 130.0):
             continue
-        n = len(COLUMN_NAMES)
-        if len(texts) < n:
-            texts.extend([""] * (n - len(texts)))
-        texts = texts[:n]
-        if all(t == "" for t in texts):
-            continue
-        rows_data.append(texts)
 
-    df = pd.DataFrame(rows_data, columns=COLUMN_NAMES)
-    df.insert(0, "Ano", year)
-    df["Contratante"] = df["Contratante"].apply(_clean_ref)
+        records.append({
+            "Ano": year,
+            "Turno": turno,
+            "Contratante": contractor,
+            "Data(s) de Pesquisa": date_label,
+            "Tamanho da Amostra": sample,
+            "Margem de Erro (pp)": _parse_number(row[required["margin"]]),
+            "Lula (PT) %": lula,
+            "Flávio (PL) %": flavio,
+            "Outros %": round(float(outros), 4),
+            "Indecisos e Abstenções %": undecided,
+            "Cenário": _scenario_label(row, mapping),
+            "_Tabela fonte": table_index,
+        })
+    return records
 
-    for col in ["Lula (PT) %", "Flávio (PL) %", "Indecisos e Absentos %"]:
-        df[col] = pd.to_numeric(
-            df[col].str.replace("%", "", regex=False)
-                   .str.replace(",", ".", regex=False).str.strip(),
-            errors="coerce")
 
-    df["Margem de Erro (pp)"] = pd.to_numeric(
-        df["Margem de Erro (pp)"].str.replace(",", ".", regex=False).str.strip(),
-        errors="coerce")
+def extract_all_polls(soup) -> pd.DataFrame:
+    """Percorre todas as wikitables, sem lista prévia de anos ou institutos."""
+    records = []
+    tables = soup.select("table.wikitable")
+    for table_index, table in enumerate(tables):
+        records.extend(parse_poll_table(table, table_index))
+    if not records:
+        raise RuntimeError("Nenhuma pesquisa contendo simultaneamente Lula e Flávio foi encontrada.")
 
-    df["Tamanho da Amostra"] = pd.to_numeric(
-        df["Tamanho da Amostra"].str.replace(r"\s", "", regex=True)
-                                .str.replace(".", "", regex=False),
-        errors="coerce").astype("Int64")
+    frame = pd.DataFrame(records)
+    # Tabelas podem repetir exatamente uma linha na fronteira entre subseções.
+    dedupe_columns = [column for column in OUTPUT_COLUMNS if column != "Cenário"] + ["Cenário"]
+    frame = frame.drop_duplicates(subset=dedupe_columns).reset_index(drop=True)
+    return frame
 
-    return df
+
+print("✅  Funções de aquisição carregadas.")
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# CÉLULA 3 — Snapshot e relatório de alterações
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+def _serialize_value(value) -> str:
+    if value is None or (isinstance(value, (float, np.floating)) and not np.isfinite(value)):
+        return ""
+    if isinstance(value, (int, np.integer)):
+        return str(int(value))
+    if isinstance(value, (float, np.floating)):
+        return f"{float(value):g}"
+    return str(value)
+
 
 def _df_to_records(df):
     records = {}
+    occurrences = {}
     for _, row in df.iterrows():
-        key = " | ".join(str(row[c]) for c in KEY_COLS)
-        records[key] = {col: str(row[col]) for col in df.columns}
+        base = " | ".join(
+            _serialize_value(row[column])
+            for column in ("Ano", "Turno", "Contratante", "Data(s) de Pesquisa", "Cenário")
+        )
+        occurrences[base] = occurrences.get(base, 0) + 1
+        key = base if occurrences[base] == 1 else f"{base} | cenário {occurrences[base]}"
+        records[key] = {
+            column: _serialize_value(row[column]) for column in OUTPUT_COLUMNS
+        }
     return records
 
+
 def _load_snapshot():
-    p = Path(SNAPSHOT_FILE)
-    if p.exists():
-        with open(p, encoding="utf-8") as f:
-            return json.load(f)
+    path = Path(SNAPSHOT_FILE)
+    if path.exists():
+        with path.open(encoding="utf-8") as file:
+            return json.load(file)
     return {}
 
+
 def _save_snapshot(records, timestamp):
-    with open(SNAPSHOT_FILE, "w", encoding="utf-8") as f:
-        json.dump({"timestamp": timestamp, "records": records},
-                  f, ensure_ascii=False, indent=2)
+    with Path(SNAPSHOT_FILE).open("w", encoding="utf-8") as file:
+        json.dump({"timestamp": timestamp, "records": records}, file,
+                  ensure_ascii=False, indent=2)
     print(f"\n✅  Snapshot salvo em '{SNAPSHOT_FILE}' ({len(records)} registros).")
 
+
 def _compare_snapshots(old, new):
-    added   = set(new) - set(old)
+    added = set(new) - set(old)
     removed = set(old) - set(new)
-    changed = [k for k in set(new) & set(old) if new[k] != old[k]]
-
-    print("\n" + "═"*68)
+    changed = [key for key in set(new) & set(old) if new[key] != old[key]]
+    print("\n" + "═" * 72)
     print("📊  RELATÓRIO DE MUDANÇAS")
-    print("═"*68)
-
+    print("═" * 72)
     if not added and not removed and not changed:
-        print("✔   Nenhuma mudança detectada.\n")
+        print("✔ Nenhuma mudança detectada.")
         return
+    print(f"  Novos: {len(added)} | Alterados: {len(changed)} | Removidos: {len(removed)}")
+    for key in sorted(added)[:20]:
+        row = new[key]
+        print(
+            f"  + {row['Turno']} | {row['Contratante']} | {row['Data(s) de Pesquisa']} | "
+            f"Lula {row['Lula (PT) %']}% | Flávio {row['Flávio (PL) %']}%"
+        )
+    if len(added) > 20:
+        print(f"  ... e mais {len(added) - 20} novo(s) registro(s).")
 
-    if added:
-        print(f"\n🆕  {len(added)} NOVO(S) REGISTRO(S):")
-        for k in sorted(added):
-            r = new[k]
-            print(f"   • {k}\n"
-                  f"     Lula: {r.get('Lula (PT) %')}%  |  "
-                  f"Flávio: {r.get('Flávio (PL) %')}%  |  "
-                  f"Vantagem: {r.get('Vantagem')}")
-    if changed:
-        print(f"\n✏️   {len(changed)} REGISTRO(S) ALTERADO(S):")
-        for k in sorted(changed):
-            print(f"   • {k}")
-            for col in new[k]:
-                if new[k][col] != old[k][col]:
-                    print(f"       {col}: '{old[k][col]}' → '{new[k][col]}'")
-    if removed:
-        print(f"\n❌  {len(removed)} REGISTRO(S) REMOVIDO(S):")
-        for k in sorted(removed):
-            print(f"   • {k}")
-    print()
 
 def scrape(url=URL, local_file=None):
-    """Extrai as tabelas de pesquisas da Wikipedia e retorna um DataFrame."""
     timestamp = datetime.now().isoformat(timespec="seconds")
-    fonte = f"arquivo: {local_file}" if local_file else url
-
-    print(f"\n{'═'*68}")
-    print(f"  🗳️  SCRAPER – 2º Turno Lula × Flávio Bolsonaro")
-    print(f"{'═'*68}")
-    print(f"  Execução : {timestamp}")
-    print(f"  Fonte    : {fonte}\n")
+    source = f"arquivo: {local_file}" if local_file else url
+    print("\n" + "═" * 72)
+    print("  🗳️  SCRAPER – PRIMEIRO E SEGUNDO TURNO, TODAS AS CASAS")
+    print("═" * 72)
+    print(f"  Execução: {timestamp}")
+    print(f"  Fonte: {source}\n")
 
     soup = _fetch_file(local_file) if local_file else _fetch_url(url)
+    frame = extract_all_polls(soup)
+    counts = frame.groupby(["Turno", "Ano"]).size()
+    print(f"✔ {len(frame)} cenários extraídos de {frame['Contratante'].nunique()} casas.")
+    for (turno, year), count in counts.items():
+        print(f"  - {turno}, {year}: {count}")
 
-    print(f"🔎  Localizando seção '{TARGET_H3}'...")
-    section = find_target_section(soup, TARGET_H3)
-    if not section:
-        raise RuntimeError(f"Seção '{TARGET_H3}' não encontrada. Verifique TARGET_H3.")
-    print("    ✔ Encontrada.")
-
-    print(f"📅  Extraindo subseções {TARGET_YEARS}...")
-    year_tables = find_year_tables(section, TARGET_YEARS)
-    if not year_tables:
-        raise RuntimeError("Nenhuma tabela encontrada. Verifique TARGET_YEARS.")
-
-    frames = []
-    for year in TARGET_YEARS:
-        if year not in year_tables:
-            print(f"⚠️   Subseção {year} não encontrada — pulando.")
-            continue
-        print(f"📊  Processando {year}...")
-        df_year = parse_table(year_tables[year], year)
-        frames.append(df_year)
-        print(f"    ✔ {len(df_year)} registros extraídos.")
-
-    if not frames:
-        raise RuntimeError("Nenhum dado foi extraído.")
-
-    df_all = pd.concat(frames, ignore_index=True)
-
-    new_records = _df_to_records(df_all)
-    old_snap    = _load_snapshot()
-    old_records = old_snap.get("records", {})
-
+    new_records = _df_to_records(frame)
+    old_snapshot = _load_snapshot()
+    old_records = old_snapshot.get("records", {})
     if old_records:
-        print(f"\n📂  Snapshot anterior: {old_snap.get('timestamp', '?')}")
+        print(f"\n📂  Snapshot anterior: {old_snapshot.get('timestamp', '?')}")
         _compare_snapshots(old_records, new_records)
     else:
         print("\n📂  Primeiro snapshot — sem comparação anterior.")
-
     _save_snapshot(new_records, timestamp)
-    return df_all
+    return frame.drop(columns=["_Tabela fonte"], errors="ignore")
 
-print("✅  Funções do Bloco 1 carregadas.")
+
+print("✅  Funções de snapshot carregadas.")
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# CÉLULA 3 — Funções do Bloco 2 (normalização e desvio padrão)
+# CÉLULA 4 — Consolidação de válidos e incerteza amostral
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-def filtrar_institutos(df):
-    """Mantém apenas os institutos em INSTITUTOS_ALVO (case-insensitive)."""
-    alvo_lower = {i.lower() for i in INSTITUTOS_ALVO}
-    mask = df["Contratante"].str.lower().isin(alvo_lower)
-    df_filt = df[mask].reset_index(drop=True)
-    removidos = sorted(set(df["Contratante"]) - set(df_filt["Contratante"]))
-    print(f"  ✔ {len(df_filt)} mantidos | {len(df)-len(df_filt)} removidos "
-          f"({', '.join(removidos) if removidos else 'nenhum'})")
-    return df_filt
+def calcular_percentuais_validos(df):
+    """
+    Preserva Lula, Flávio, Outros e indecisos/abstenções em separado.
 
-def normalizar_percentuais(df):
+    As colunas "entre válidos" removem apenas indecisos e abstenções; portanto,
+    os outros candidatos continuam no denominador no primeiro turno.
     """
-    Lula Norm % = Lula% / (Lula% + Flávio%) × 100
-    Flávio Norm % = Flávio% / (Lula% + Flávio%) × 100
-    """
-    df = df.copy()
-    total = df["Lula (PT) %"] + df["Flávio (PL) %"]
-    df["Lula Norm %"]   = (df["Lula (PT) %"]   / total * 100).round(4)
-    df["Flávio Norm %"] = (df["Flávio (PL) %"] / total * 100).round(4)
-    soma = (df["Lula Norm %"] + df["Flávio Norm %"]).round(2)
-    invalidos = (soma != 100).sum()
-    if invalidos:
-        print(f"  ⚠️  {invalidos} linha(s) com soma ≠ 100%")
-    else:
-        print("  ✔ Todas as linhas somam 100%")
-    return df
+    frame = df.copy()
+    frame["Respostas Válidas %"] = (
+        frame["Lula (PT) %"] + frame["Flávio (PL) %"] + frame["Outros %"]
+    )
+    valid = frame["Respostas Válidas %"].replace(0, np.nan)
+    frame["Lula entre Válidos %"] = (frame["Lula (PT) %"] / valid * 100).round(4)
+    frame["Flávio entre Válidos %"] = (frame["Flávio (PL) %"] / valid * 100).round(4)
+    frame["Outros entre Válidos %"] = (frame["Outros %"] / valid * 100).round(4)
+    return frame
+
 
 def calcular_desvio_padrao(df):
-    """
-    σ = sqrt( p · (1−p) / (h · n) )
-      p = Flávio Norm % / 100
-      h = Indecisos e Absentos % / 100
-      n = Tamanho da Amostra
-    """
-    df = df.copy()
-    p = df["Flávio Norm %"] / 100
-    h = 1-df["Indecisos e Absentos %"] / 100
-    n = df["Tamanho da Amostra"].astype(float)
-    denominador = h * n
+    """Delta/binomial: sqrt(p(1-p)/(n*q)), com q = fração válida."""
+    frame = df.copy()
+    p = frame["Flávio entre Válidos %"] / 100.0
+    q = frame["Respostas Válidas %"] / 100.0
+    n = frame["Tamanho da Amostra"].astype(float)
     with np.errstate(divide="ignore", invalid="ignore"):
-        sigma = np.where(
-            denominador > 0,
-            np.sqrt(p * (1 - p) / denominador),
-            np.nan,
-        )
-    df["Desvio Padrão Flávio"] = np.round(sigma, 6)
-    nans = df["Desvio Padrão Flávio"].isna().sum()
-    if nans:
-        print(f"  ⚠️  {nans} linha(s) com σ = NaN (h=0 ou amostra ausente)")
-    else:
-        print(f"  ✔ Desvio padrão calculado para todas as {len(df)} linhas")
-    return df
+        sigma = np.where(n * q > 0.0, np.sqrt(p * (1.0 - p) / (n * q)), np.nan)
+    frame["Desvio Padrão Flávio"] = np.round(sigma, 6)
+    return frame
+
 
 def processar(df):
-    """Aplica filtro → normalização → desvio padrão em sequência."""
-    print("\n" + "═"*68)
-    print("  🔬  BLOCO 2 – Normalização e Desvio Padrão")
-    print("═"*68)
-    print("\n📌  Etapa 1 – Filtro de institutos")
-    df = filtrar_institutos(df)
-    print("\n📐  Etapa 2 – Normalização (Lula + Flávio = 100%)")
-    df = normalizar_percentuais(df)
-    print("\n📏  Etapa 3 – Desvio padrão: σ = √(p·(1-p) / (h·n))")
-    df = calcular_desvio_padrao(df)
-    print(f"\n✅  Concluído — {len(df)} registros, {df['Ano'].nunique()} ano(s).\n")
-    return df
+    print("\n" + "═" * 72)
+    print("  🔬  CONSOLIDAÇÃO: LULA, FLÁVIO, OUTROS E NÃO RESPOSTAS")
+    print("═" * 72)
+    frame = calcular_percentuais_validos(df)
+    frame = calcular_desvio_padrao(frame)
+    print(
+        f"✔ {len(frame)} cenários | {frame['Contratante'].nunique()} casas | "
+        f"{frame['Turno'].nunique()} turnos"
+    )
+    return frame
+
 
 def exibir(df):
-    """Imprime os resultados organizados por ano com estatísticas resumidas."""
-    print("\n" + "═"*68)
+    print("\n" + "═" * 72)
     print("  📋  RESULTADOS PROCESSADOS")
-    print("═"*68)
+    print("═" * 72)
+    for (turno, year), subset in df.groupby(["Turno", "Ano"], sort=False):
+        display = subset[COLUNAS_EXIBICAO].copy()
+        print(f"\n{'─' * 72}\n  {turno} — {year} ({len(display)} cenários)\n{'─' * 72}")
+        with pd.option_context(
+            "display.max_columns", None, "display.width", 220,
+            "display.max_rows", None, "display.max_colwidth", 45,
+        ):
+            print(display.to_string(index=False))
 
-    for ano in sorted(df["Ano"].unique(), reverse=True):
-        sub = df[df["Ano"] == ano][COLUNAS_EXIBICAO].copy()
-        sub["Desvio Padrão Flávio"] = sub["Desvio Padrão Flávio"].map(
-            lambda x: f"{x:.4f}" if pd.notna(x) else "—")
-        sub["Lula Norm %"]   = sub["Lula Norm %"].map(lambda x: f"{x:.2f}%")
-        sub["Flávio Norm %"] = sub["Flávio Norm %"].map(lambda x: f"{x:.2f}%")
-
-        print(f"\n{'─'*68}\n  {ano}  ({len(sub)} pesquisas)\n{'─'*68}")
-        with pd.option_context("display.max_columns", None,
-                               "display.width", 140, "display.max_rows", None):
-            print(sub.drop(columns="Ano").to_string(index=False))
-
-    print(f"\n{'─'*68}")
-    print("  📊  ESTATÍSTICAS RESUMIDAS (por instituto e ano)")
-    print(f"{'─'*68}")
-    resumo = (
-        df.groupby(["Ano", "Contratante"], sort=False)
-        .agg(N=("Flávio Norm %", "count"),
-             Flávio_Norm_Médio=("Flávio Norm %", "mean"),
-             Lula_Norm_Médio=("Lula Norm %", "mean"),
-             Desvio_Médio=("Desvio Padrão Flávio", "mean"))
-        .round(2).reset_index()
+    print(f"\n{'─' * 72}\n  📊  RESUMO POR TURNO, ANO E CASA\n{'─' * 72}")
+    summary = (
+        df.groupby(["Turno", "Ano", "Contratante"], sort=False)
+        .agg(
+            Cenários=("Flávio (PL) %", "count"),
+            Lula_Médio=("Lula (PT) %", "mean"),
+            Flávio_Médio=("Flávio (PL) %", "mean"),
+            Outros_Médio=("Outros %", "mean"),
+            Indecisos_Médio=("Indecisos e Abstenções %", "mean"),
+        )
+        .round(2)
+        .reset_index()
     )
-    with pd.option_context("display.max_columns", None, "display.width", 120):
-        print(resumo.to_string(index=False))
-    print()
+    with pd.option_context("display.max_rows", None, "display.width", 180):
+        print(summary.to_string(index=False))
 
-print("✅  Funções do Bloco 2 carregadas.")
+
+print("✅  Funções de processamento carregadas.")
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# CÉLULA 4 — Execução
+# CÉLULA 5 — Execução
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#
-# Para usar arquivo local, edite LOCAL_FILE na CÉLULA 1, por exemplo:
-#   LOCAL_FILE = r"C:\Users\joaqu\Downloads\Wikipedia.txt"
-#
-# Depois execute esta célula:
 
-df_raw       = scrape(local_file=LOCAL_FILE)
-df_processed = processar(df_raw)
-exibir(df_processed)
+if __name__ == "__main__":
+    df_raw = scrape(local_file=LOCAL_FILE)
+    df_processed = processar(df_raw)
+    exibir(df_processed)

@@ -1,0 +1,6 @@
+beautifulsoup4>=4.12,<5
+lxml>=5,<7
+matplotlib>=3.9,<4
+numpy>=2,<3
+pandas>=2.2,<4
+requests>=2.32,<3

@@ -1,613 +1,562 @@
 """
-BLOCO 3 – Agregador de Pesquisas via Filtro de Kalman + Suavizador RTS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Implementa a Nota Técnica de Joaquim Antônio Costa Bermudes (15/04/2026).
+Estimação offline do agregador eleitoral com reversão à média.
 
-Pipeline:
-  1. Carrega snapshot_pesquisas.json e prepara (y_t, R_t, Δt)
-  2. Estima (σ², b_1…b_{K-1}) via EM:
-       E-step: filtro de Kalman escalar + suavizador RTS
-       M-step: atualização fechada de σ² e regressão ponderada para vieses
-  3. Aplica filtro de Kalman aumentado (estado + vieses) para inferência online
-  4. Grava kalman_parametros.json com parâmetros e estados suavizados
+Implementa a nota técnica ``Agregador_de_Pesquisas_Eleitorais_Reversao_Media.tex``:
 
-Uso no Jupyter:
-    from kalman_agregador import run
-    resultado = run()      # usa snapshot_pesquisas.json
+* estado dinâmico s_t = [x_t, mu_t], em escala logit;
+* x_t reverte ao componente persistente mu_t por uma transição OU exata;
+* mu_t segue passeio aleatório;
+* vieses dos institutos somam zero;
+* sigma_x², q_mu e vieses são estimados por EM + suavizador RTS.
+
+O JSON produzido é consumido por ``kalman_filtro_online.py``.
 """
+
+from __future__ import annotations
 
 import json
 import re
-import numpy as np
-from copy import deepcopy
+import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
-# ─────────────────────────────────────────────────────────────────────────────
-# ⚙️  CONFIGURAÇÕES
-# ─────────────────────────────────────────────────────────────────────────────
+import numpy as np
 
-SNAPSHOT_FILE  = "snapshot_pesquisas.json"
-OUTPUT_FILE    = "kalman_parametros.json"
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
 
-# Mesmos institutos do Bloco 2 (Apex/Futura → Futura/Apex)
+
+SNAPSHOT_FILE = "snapshot_pesquisas.json"
+OUTPUT_FILE = "kalman_parametros.json"
+
+# Segundo turno das eleições gerais de 2026 (calendário do TSE).
+ELECTION_DATE = datetime(2026, 10, 25)
+# Fração do desvio inicial x-mu que permanece até a eleição (99% dissipado).
+REVERSAO_RESTANTE = 0.01
+
 INSTITUTOS_CANONICOS = {
     "Datafolha", "Paraná Pesquisas", "Genial/Quaest",
     "AtlasIntel", "Futura/Apex",
 }
 NOME_NORMALIZADO = {"Apex/Futura": "Futura/Apex"}
 
-# Algoritmo EM
-EM_MAX_ITER  = 500
-EM_TOL       = 1e-9        # tolerância no log-verossimilhança marginal
-SIGMA2_INIT  = 0.005       # variância inicial por dia (escala logit)
-SIGMA2_MIN   = 1e-12       # piso numérico
+EM_MAX_ITER = 500
+# Tolerância relativa da log-verossimilhança. Com poucas pesquisas, exigir
+# variação absoluta quase nula prolonga o EM sem mudança material no ajuste.
+EM_TOL = 1e-6
+SIGMA_X2_INIT = 0.005
+Q_MU_INIT = 0.0001
+VARIANCE_MIN = 1e-12
 
-# Prior difuso para x_0
-X0_MEAN = 0.0
-X0_VAR  = 10.0
+S0_MEAN = np.array([0.0, 0.0])
+S0_COV = np.diag([10.0, 10.0])
 
-# Meses em PT → número
 _MESES = {
     "jan": 1, "fev": 2, "mar": 3, "abr": 4, "mai": 5, "jun": 6,
     "jul": 7, "ago": 8, "set": 9, "out": 10, "nov": 11, "dez": 12,
 }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# SEÇÃO 1 – PREPARAÇÃO DOS DADOS
-# ─────────────────────────────────────────────────────────────────────────────
-
 def _parse_date(day: str, month_str: str, year: str) -> datetime | None:
-    m = _MESES.get(month_str.strip().lower()[:3])
-    if m is None:
+    month = _MESES.get(month_str.strip().lower()[:3])
+    if month is None:
         return None
     try:
-        return datetime(int(year), m, int(day))
-    except ValueError:
+        return datetime(int(year), month, int(day))
+    except (TypeError, ValueError):
         return None
 
 
 def _midpoint(date_range: str, year: str) -> datetime | None:
-    """
-    Converte '07 Abr - 09 Abr' na data média do intervalo.
-    Aceita traço simples '-' e travessão '–'.
-    """
-    parts = re.split(r"\s*[–-]\s*", date_range.strip())
+    """Representa o período de campo por seu ponto médio."""
     dates = []
-    for part in parts:
-        m = re.match(r"(\d+)\s+(\w+)", part.strip())
-        if m:
-            d = _parse_date(m.group(1), m.group(2), year)
-            if d:
-                dates.append(d)
+    for part in re.split(r"\s*[–-]\s*", str(date_range).strip()):
+        match = re.match(r"(\d+)\s+(\w+)", part.strip())
+        if match:
+            parsed = _parse_date(match.group(1), match.group(2), year)
+            if parsed is not None:
+                dates.append(parsed)
     if len(dates) == 2:
         return dates[0] + timedelta(days=(dates[1] - dates[0]).days / 2)
-    if len(dates) == 1:
-        return dates[0]
+    return dates[0] if dates else None
+
+
+def _nonresponse_fraction(rec: dict) -> float | None:
+    """Obtém w+u+a quando o snapshot oferece uma categoria agregada."""
+    for key in (
+        "Brancos, Nulos, Indecisos e Abstenções %",
+        "Brancos, Nulos, Indecisos e Absentos %",
+        "Indecisos e Abstenções %",
+        "Indecisos e Absentos %",
+    ):
+        try:
+            return float(rec[key]) / 100.0
+        except (KeyError, TypeError, ValueError):
+            continue
     return None
 
 
-def load_and_prepare(snapshot_file: str = SNAPSHOT_FILE) -> dict:
-    """
-    Lê o snapshot e constrói os vetores de observações para o modelo.
-
-    Para cada pesquisa t:
-        q_t = (Lula% + Flávio%) / 100          ← fração de respostas válidas  [Eq. 1]
-        p_t = (Flávio% / 100) / q_t             ← intenção ajustada            [Eq. 2]
-        y_t = log(p_t / (1 - p_t))              ← transformação logit           [Eq. 3]
-        R_t = 1 / (n_t · q_t · p_t · (1-p_t))  ← variância de observação      [Eq. 9]
-
-    Retorna dict com:
-        y, R, delta_t  : arrays numpy (T,)
-        dates          : list[datetime]
-        inst_idx       : array int (T,) — índice do instituto em 0..K-1
-        institutos     : list[str] — ordem canônica dos K institutos
-        raw            : list[dict] — metadados por observação
-    """
-    with open(snapshot_file, encoding="utf-8") as f:
-        snap = json.load(f)
-
-    rows = []
-    for rec in snap.get("records", {}).values():
-        nome = NOME_NORMALIZADO.get(rec["Contratante"], rec["Contratante"])
-        if nome not in INSTITUTOS_CANONICOS:
-            continue
-
-        date = _midpoint(rec["Data(s) de Pesquisa"], rec["Ano"])
-        if date is None:
-            continue
-
-        try:
-            lula_pct   = float(rec["Lula (PT) %"])
-            flavio_pct = float(rec["Flávio (PL) %"])
-            n          = float(rec["Tamanho da Amostra"])
-        except (ValueError, KeyError, TypeError):
-            continue
-
-        q_t = (lula_pct + flavio_pct) / 100.0  # fração de respostas válidas
-        if not (0 < q_t < 1):
-            continue
-
-        p_t = (flavio_pct / 100.0) / q_t        # prob. ajustada de Flávio
-        if not (0 < p_t < 1):
-            continue
-
-        y_t = np.log(p_t / (1.0 - p_t))         # logit
-        R_t = 1.0 / (n * q_t * p_t * (1.0 - p_t))
-
-        rows.append({
-            "date":       date,
-            "instituto":  nome,
-            "y":          y_t,
-            "R":          R_t,
-            "p":          p_t,
-            "q":          q_t,
-            "n":          n,
-            "lula_pct":   lula_pct,
-            "flavio_pct": flavio_pct,
-        })
-
-    if not rows:
-        raise ValueError("Nenhum dado válido no snapshot.")
-
-    # Ordena por data
-    rows.sort(key=lambda r: r["date"])
-    T = len(rows)
-
-    # Δt em dias entre observações consecutivas (Δt[0] não é usado no filtro)
-    delta_t = np.zeros(T)
-    for t in range(1, T):
-        delta_t[t] = (rows[t]["date"] - rows[t - 1]["date"]).days
-
-    # Codificação de institutos
-    institutos = sorted({r["instituto"] for r in rows})
-    inst2idx   = {inst: i for i, inst in enumerate(institutos)}
-    inst_idx   = np.array([inst2idx[r["instituto"]] for r in rows], dtype=int)
-    K = len(institutos)
-
-    y = np.array([r["y"] for r in rows])
-    R = np.array([r["R"] for r in rows])
-
-    print(f"\n{'─'*62}")
-    print(f"  📦  Dados carregados: {T} observações | {K} institutos")
-    print(f"       Período: {rows[0]['date'].date()} → {rows[-1]['date'].date()}")
-    for inst in institutos:
-        n_obs = int((inst_idx == inst2idx[inst]).sum())
-        print(f"       – {inst}: {n_obs} pesquisas")
-
-    return dict(y=y, R=R, delta_t=delta_t, dates=[r["date"] for r in rows],
-                inst_idx=inst_idx, institutos=institutos, K=K, raw=rows)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# SEÇÃO 2 – FILTRO DE KALMAN (estado escalar, para o EM)
-# ─────────────────────────────────────────────────────────────────────────────
-
-def kalman_filter(y, R, delta_t, sigma2, b_full, inst_idx):
-    """
-    Filtro de Kalman para estado escalar x_t (passeio aleatório).
-
-    Modelo:
-        x_t = x_{t-1} + ε_t,   ε_t ~ N(0, Δt · σ²)
-        y_t = x_t + b_{i_t} + v_t,  v_t ~ N(0, R_t)
-
-    Equivalente a filtrar y_adj_t = y_t - b_{i_t}.
-
-    Retorna: x_pred, P_pred, x_filt, P_filt (T,) e log-verossimilhança marginal.
-    """
-    T = len(y)
-    x_pred = np.empty(T)
-    P_pred = np.empty(T)
-    x_filt = np.empty(T)
-    P_filt = np.empty(T)
-    log_lik = 0.0
-
-    # Prior difuso
-    x_curr = X0_MEAN
-    P_curr = X0_VAR
-
-    for t in range(T):
-        # ── Predição [Eq. 25-26] ────────────────────────────────────────────
-        if t == 0:
-            x_p = x_curr
-            P_p = P_curr
-        else:
-            x_p = x_filt[t - 1]
-            P_p = P_filt[t - 1] + delta_t[t] * sigma2
-
-        x_pred[t] = x_p
-        P_pred[t] = P_p
-
-        # Observação ajustada
-        y_adj = y[t] - b_full[inst_idx[t]]
-
-        # ── Inovação [Eq. 27-28] ────────────────────────────────────────────
-        nu = y_adj - x_p
-        S  = P_p + R[t]
-
-        # Contribuição ao log-verossimilhança (decomposição da inovação)
-        log_lik -= 0.5 * (np.log(2.0 * np.pi * S) + nu ** 2 / S)
-
-        # ── Ganho e atualização [Eq. 29-31] ─────────────────────────────────
-        Kg = P_p / S
-        x_filt[t] = x_p + Kg * nu
-        # Forma de Joseph: numericamente estável
-        P_filt[t] = (1.0 - Kg) ** 2 * P_p + Kg ** 2 * R[t]
-
-    return x_pred, P_pred, x_filt, P_filt, log_lik
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# SEÇÃO 2 – SUAVIZADOR RTS (Rauch–Tung–Striebel)
-# ─────────────────────────────────────────────────────────────────────────────
-
-def rts_smoother(x_pred, P_pred, x_filt, P_filt):
-    """
-    Suavizador RTS backward pass.
-
-    Retorna:
-        x_smooth  (T,) : E[x_t | y_{1:T}]
-        P_smooth  (T,) : Var[x_t | y_{1:T}]
-        P_cross   (T,) : Cov[x_t, x_{t-1} | y_{1:T}]  (P_cross[0] não usado)
-    """
-    T = len(x_filt)
-    x_smooth = np.empty(T)
-    P_smooth = np.empty(T)
-    P_cross  = np.zeros(T)
-
-    x_smooth[-1] = x_filt[-1]
-    P_smooth[-1] = P_filt[-1]
-
-    for t in range(T - 2, -1, -1):
-        # Ganho do suavizador: G_t = P_{t|t} / P_{t+1|t}  (F=1 para passeio aleatório)
-        G = P_filt[t] / P_pred[t + 1]
-
-        x_smooth[t] = x_filt[t] + G * (x_smooth[t + 1] - x_pred[t + 1])
-        P_smooth[t] = P_filt[t] + G ** 2 * (P_smooth[t + 1] - P_pred[t + 1])
-
-        # Covariância cruzada P_{t+1, t | T}  [Eq. 47]
-        P_cross[t + 1] = G * P_smooth[t + 1]
-
-    return x_smooth, P_smooth, P_cross
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# SEÇÃO 3 – PASSO M DO EM
-# ─────────────────────────────────────────────────────────────────────────────
-
-def m_step(y, R, delta_t, x_smooth, P_smooth, P_cross, inst_idx, K):
-    """
-    Atualização fechada dos parâmetros (passo M do EM).
-
-    σ²:  [Eq. 48]
-        σ² = Σ E[(x_t - x_{t-1})²] / Σ Δt
-        E[(x_t - x_{t-1})²] = P_t + P_{t-1} - 2 P_{t,t-1} + (x̂_t - x̂_{t-1})²  [Eq. 51]
-
-    Vieses b_{1..K-1}:  [Eq. 57]
-        Regressão ponderada: r_t = y_t - x̂_t ≈ b_{i_t}
-
-    Retorna: sigma2_new (float), biases_new (K-1,)
-    """
-    T = len(y)
-
-    # ── Atualização de σ² ─────────────────────────────────────────────────
-    num_s2 = 0.0
-    den_s2 = 0.0
-    for t in range(1, T):
-        E_diff2 = (P_smooth[t] + P_smooth[t - 1]
-                   - 2.0 * P_cross[t]
-                   + (x_smooth[t] - x_smooth[t - 1]) ** 2)
-        num_s2 += E_diff2
-        den_s2 += delta_t[t]
-
-    sigma2_new = max(num_s2 / den_s2, SIGMA2_MIN)
-
-    # ── Atualização dos vieses [Eq. 56-57] ───────────────────────────────
-    if K == 1:
-        return sigma2_new, np.zeros(0)
-
-    r = y - x_smooth        # resíduos do estado suavizado
-    W = 1.0 / R             # pesos
-
-    # Matriz H: T × (K-1)
-    # h_t = e_j  se i_t = j < K
-    # h_t = (-1, …, -1)  se i_t = K-1 (último instituto)  [Eq. 55]
-    H = np.zeros((T, K - 1))
-    for t in range(T):
-        i = inst_idx[t]
-        if i < K - 1:
-            H[t, i] = 1.0
-        else:
-            H[t, :] = -1.0
-
-    # (H^T W H)^{-1} H^T W r
-    HWH = H.T @ (W[:, None] * H)
-    HWr = H.T @ (W * r)
-
-    # Regularização leve para evitar singularidade
-    HWH += np.eye(K - 1) * 1e-12
-    biases_new = np.linalg.solve(HWH, HWr)
-
-    return sigma2_new, biases_new
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# SEÇÃO 3 – LOOP EM
-# ─────────────────────────────────────────────────────────────────────────────
-
-def run_em(data: dict) -> tuple:
-    """
-    Algoritmo EM completo para estimar σ² e b_{1..K-1}.
-
-    Retorna:
-        sigma2     : float — variância por dia estimada
-        b_full     : (K,) — vieses completos (inclui b_K por restrição Σb=0)
-        institutos : list[str]
-        x_smooth   : (T,) — estados suavizados
-        P_smooth   : (T,) — variâncias suavizadas
-        log_lik    : float — log-verossimilhança final
-        n_iter     : int
-    """
-    y        = data["y"]
-    R        = data["R"]
-    delta_t  = data["delta_t"]
-    inst_idx = data["inst_idx"]
-    K        = data["K"]
-    T        = len(y)
-
-    # Inicialização
-    sigma2  = SIGMA2_INIT
-    biases  = np.zeros(K - 1)   # b_1, ..., b_{K-1}
-
-    prev_ll = -np.inf
-
-    print(f"\n{'─'*62}")
-    print(f"  🔄  EM — T={T} obs. | K={K} institutos | máx. {EM_MAX_ITER} iter.")
-    print(f"{'─'*62}")
-    print(f"  {'Iter':>5}  {'Log-Lik':>14}  {'Δ Log-Lik':>13}  {'σ (por dia)':>12}")
-    print(f"  {'─'*5}  {'─'*14}  {'─'*13}  {'─'*12}")
-
-    n_iter = 0
-    for iteration in range(EM_MAX_ITER):
-        # Vetor completo de vieses (inclui b_K = -Σb)
-        b_full = np.zeros(K)
-        b_full[: K - 1] = biases
-        b_full[K - 1]   = -np.sum(biases)
-
-        # ── E-step ──────────────────────────────────────────────────────────
-        x_pred, P_pred, x_filt, P_filt, log_lik = kalman_filter(
-            y, R, delta_t, sigma2, b_full, inst_idx)
-        x_smooth, P_smooth, P_cross = rts_smoother(
-            x_pred, P_pred, x_filt, P_filt)
-
-        # ── M-step ──────────────────────────────────────────────────────────
-        sigma2, biases = m_step(
-            y, R, delta_t, x_smooth, P_smooth, P_cross, inst_idx, K)
-
-        delta_ll = log_lik - prev_ll
-        n_iter   = iteration + 1
-
-        # Log a cada 25 iterações ou nas primeiras 5
-        if n_iter <= 5 or n_iter % 25 == 0:
-            print(f"  {n_iter:>5}  {log_lik:>14.4f}  {delta_ll:>13.6f}  "
-                  f"{np.sqrt(sigma2):>12.6f}")
-
-        if abs(delta_ll) < EM_TOL and iteration > 0:
-            print(f"  {n_iter:>5}  {log_lik:>14.4f}  {delta_ll:>13.2e}  "
-                  f"{np.sqrt(sigma2):>12.6f}")
-            print(f"\n  ✔ Convergência em {n_iter} iterações "
-                  f"(|ΔLL| = {abs(delta_ll):.2e} < {EM_TOL:.0e})")
-            break
-        prev_ll = log_lik
-    else:
-        print(f"\n  ⚠️  Máximo de {EM_MAX_ITER} iterações atingido.")
-
-    # Suavizador final com parâmetros convergidos
-    b_full = np.zeros(K)
-    b_full[: K - 1] = biases
-    b_full[K - 1]   = -np.sum(biases)
-
-    _, _, _, _, log_lik = kalman_filter(y, R, delta_t, sigma2, b_full, inst_idx)
-    x_pred, P_pred, x_filt, P_filt, _ = kalman_filter(
-        y, R, delta_t, sigma2, b_full, inst_idx)
-    x_smooth, P_smooth, _ = rts_smoother(x_pred, P_pred, x_filt, P_filt)
-
-    return sigma2, b_full, x_smooth, P_smooth, x_filt, P_filt, log_lik, n_iter
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# SEÇÃO 2 – FILTRO DE KALMAN AUMENTADO (online, parâmetros fixos)
-# ─────────────────────────────────────────────────────────────────────────────
-
-def kalman_augmented(data: dict, sigma2: float, b_full: np.ndarray):
-    """
-    Filtro de Kalman aumentado conforme Seção 2 do PDF.
-
-    Estado aumentado: x_t = [x_t, b_1, ..., b_{K-1}]^T  ∈ R^K
-    Dinâmica: x_t = x_{t-1} + w_t,  w_t ~ N(0, Q_t)
-    Q_t = Δt · diag(σ², 0, ..., 0)
-
-    Observação: y_t = H_t x_t + v_t,  v_t ~ N(0, R_t)
-    H_t: linha com 1 na posição x e ±1 na posição do viés.
-
-    Retorna arrays de médias e variâncias filtradas (apenas x_t, 1º componente).
-    """
-    y        = data["y"]
-    R        = data["R"]
-    delta_t  = data["delta_t"]
-    inst_idx = data["inst_idx"]
-    K        = data["K"]
-    T        = len(y)
-
-    # Inicializa estado e covariância aumentados
-    dim = K
-    x_aug = np.zeros(dim)
-    x_aug[1:] = b_full[: K - 1]          # vieses fixos (b_1…b_{K-1})
-    P_aug = np.zeros((dim, dim))
-    P_aug[0, 0] = X0_VAR                  # incerteza apenas no estado latente
-
-    x_filt_aug = np.empty(T)
-    P_filt_aug = np.empty(T)
-
-    for t in range(T):
-        # ── Predição ────────────────────────────────────────────────────────
-        Q = np.zeros((dim, dim))
-        if t > 0:
-            Q[0, 0] = delta_t[t] * sigma2
-        P_pred = P_aug + Q                 # Eq. 26
-
-        # ── Vetor H_t ───────────────────────────────────────────────────────
-        H = np.zeros(dim)
-        H[0] = 1.0
-        i = inst_idx[t]
-        if i < K - 1:                      # Eq. 23
-            H[1 + i] = 1.0
-        else:                              # Eq. 24  (último instituto)
-            H[1:] = -1.0
-
-        # ── Inovação [Eq. 27-28] ────────────────────────────────────────────
-        nu = y[t] - H @ x_aug             # usa predição x_aug (= x_{t|t-1})
-        S  = H @ P_pred @ H + R[t]        # escalar
-
-        # ── Ganho e atualização [Eq. 29-31] ─────────────────────────────────
-        Kg = (P_pred @ H) / S             # (K,)
-        x_aug = x_aug + Kg * nu
-        I_KH  = np.eye(dim) - np.outer(Kg, H)
-        P_aug = I_KH @ P_pred @ I_KH.T + np.outer(Kg, Kg) * R[t]  # Joseph
-
-        x_filt_aug[t] = x_aug[0]
-        P_filt_aug[t] = P_aug[0, 0]
-
-    return x_filt_aug, P_filt_aug
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# PIPELINE PRINCIPAL
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _logit_to_prob(x):
-    return 1.0 / (1.0 + np.exp(-x))
-
-
-def _ic95(x, P):
-    """Intervalo de credibilidade 95% na escala de probabilidade."""
-    z = 1.959964
-    lo = _logit_to_prob(x - z * np.sqrt(P))
-    hi = _logit_to_prob(x + z * np.sqrt(P))
-    return lo, hi
-
-
-def run(snapshot_file: str = SNAPSHOT_FILE,
-        output_file:   str = OUTPUT_FILE) -> dict:
-    """
-    Executa o pipeline completo e salva os resultados em JSON.
-
-    Retorna o dicionário de resultados.
-    """
-    print("\n" + "═" * 62)
-    print("  📡  AGREGADOR DE PESQUISAS – Filtro de Kalman + RTS")
-    print("═" * 62)
-    print(f"  Nota Técnica: Joaquim Antônio Costa Bermudes (15/04/2026)")
-
-    # 1. Preparação dos dados
-    print(f"\n📥  Carregando dados de '{snapshot_file}'...")
-    data = load_and_prepare(snapshot_file)
-
-    # 2. EM
-    print("\n🔄  Estimando parâmetros via EM...")
-    (sigma2, b_full, x_smooth, P_smooth,
-     x_filt, P_filt, log_lik, n_iter) = run_em(data)
-
-    institutos = data["institutos"]
-    K          = data["K"]
-
-    # 3. Filtro aumentado (online)
-    print("\n📊  Aplicando filtro de Kalman aumentado (parâmetros fixos)...")
-    x_filt_aug, P_filt_aug = kalman_augmented(data, sigma2, b_full)
-    print("    ✔ Concluído.")
-
-    # 4. Resumo dos parâmetros
-    print(f"\n{'─'*62}")
-    print("  📋  PARÂMETROS ESTIMADOS")
-    print(f"{'─'*62}")
-    print(f"  σ² (por dia, escala logit) : {sigma2:.8f}")
-    print(f"  σ  (por dia, escala logit) : {np.sqrt(sigma2):.6f}")
-    print(f"  σ  (por semana)            : {np.sqrt(sigma2 * 7):.6f}")
-    print(f"  Log-verossimilhança        : {log_lik:.4f}")
-    print(f"  Iterações EM               : {n_iter}")
-    print(f"\n  Vieses b_i (escala logit) — Σ b_i = 0 por construção:")
-    for i, inst in enumerate(institutos):
-        print(f"    [{i}] {inst:<22s}: {b_full[i]:+.6f}")
-
-    # Estado suavizado final (última observação)
-    p_final  = _logit_to_prob(x_smooth[-1])
-    p_lo, p_hi = _ic95(x_smooth[-1], P_smooth[-1])
-    print(f"\n  Estimativa suavizada (última obs., {data['dates'][-1].date()}):")
-    print(f"    Flávio (PL): {p_final*100:.2f}%  IC95%: "
-          f"[{p_lo*100:.2f}%, {p_hi*100:.2f}%]")
-
-    # 5. Serialização
-    timestamp = datetime.now().isoformat(timespec="seconds")
-
-    estados = []
-    for t in range(len(data["y"])):
-        p_s   = _logit_to_prob(x_smooth[t])
-        p_f   = _logit_to_prob(x_filt_aug[t])
-        lo_s, hi_s = _ic95(x_smooth[t],   P_smooth[t])
-        lo_f, hi_f = _ic95(x_filt_aug[t], P_filt_aug[t])
-
-        estados.append({
-            "t":                     t,
-            "data":                  data["dates"][t].strftime("%Y-%m-%d"),
-            "instituto":             data["institutos"][data["inst_idx"][t]],
-            "y_obs":                 round(float(data["y"][t]), 6),
-            "R_obs":                 round(float(data["R"][t]), 6),
-            # Suavizador RTS
-            "x_smooth":              round(float(x_smooth[t]), 6),
-            "P_smooth":              round(float(P_smooth[t]), 6),
-            "p_smooth":              round(float(p_s), 4),
-            "p_smooth_ic95_lo":      round(float(lo_s), 4),
-            "p_smooth_ic95_hi":      round(float(hi_s), 4),
-            # Filtro aumentado (online)
-            "x_filt":                round(float(x_filt_aug[t]), 6),
-            "P_filt":                round(float(P_filt_aug[t]), 6),
-            "p_filt":                round(float(p_f), 4),
-            "p_filt_ic95_lo":        round(float(lo_f), 4),
-            "p_filt_ic95_hi":        round(float(hi_f), 4),
-        })
-
-    resultado = {
-        "timestamp":   timestamp,
-        "fonte":       snapshot_file,
-        "nota_tecnica": "Bermudes, J.A.C. (2026-04-15)",
-        "parametros": {
-            "sigma2_por_dia":    round(float(sigma2), 10),
-            "sigma_por_dia":     round(float(np.sqrt(sigma2)), 8),
-            "sigma_por_semana":  round(float(np.sqrt(sigma2 * 7)), 8),
-            "log_verossimilhanca": round(float(log_lik), 6),
-            "n_iteracoes_em":    n_iter,
-            "convergiu":         n_iter < EM_MAX_ITER,
-            "vieses": {
-                inst: round(float(b_full[i]), 8)
-                for i, inst in enumerate(institutos)
-            },
-        },
-        "estados": estados,
+def _prepare_record(rec: dict) -> dict | None:
+    nome = NOME_NORMALIZADO.get(rec.get("Contratante"), rec.get("Contratante"))
+    if nome not in INSTITUTOS_CANONICOS:
+        return None
+
+    date = _midpoint(rec.get("Data(s) de Pesquisa", ""), rec.get("Ano", ""))
+    if date is None:
+        return None
+
+    try:
+        lula_pct = float(rec["Lula (PT) %"])
+        flavio_pct = float(rec["Flávio (PL) %"])
+        n = float(rec["Tamanho da Amostra"])
+    except (KeyError, TypeError, ValueError):
+        return None
+
+    nonresponse = _nonresponse_fraction(rec)
+    q_t = 1.0 - nonresponse if nonresponse is not None else (lula_pct + flavio_pct) / 100.0
+    # Em disputas de dois candidatos, a soma observada é a alternativa mais
+    # consistente quando categorias agregadas têm arredondamento diferente.
+    q_candidates = (lula_pct + flavio_pct) / 100.0
+    if abs(q_t - q_candidates) > 0.02:
+        q_t = q_candidates
+
+    if n <= 0 or not (0.0 < q_t <= 1.0):
+        return None
+    p_t = (flavio_pct / 100.0) / q_t
+    if not (0.0 < p_t < 1.0):
+        return None
+
+    y_t = float(np.log(p_t / (1.0 - p_t)))
+    R_t = float(1.0 / (n * q_t * p_t * (1.0 - p_t)))
+    return {
+        "date": date,
+        "instituto": nome,
+        "y": y_t,
+        "R": R_t,
+        "p": p_t,
+        "q": q_t,
+        "n": n,
+        "lula_pct": lula_pct,
+        "flavio_pct": flavio_pct,
     }
 
-    with open(output_file, "w", encoding="utf-8") as f:
-        json.dump(resultado, f, ensure_ascii=False, indent=2)
 
-    print(f"\n✅  Parâmetros e estados salvos em '{output_file}'.")
-    print(f"    Total de {len(estados)} estados ({len(estados)} observações).")
+def load_and_prepare(snapshot_file: str = SNAPSHOT_FILE) -> dict:
+    """Constrói (y_t, R_t, Delta_t) segundo a primeira seção da nota."""
+    with open(snapshot_file, encoding="utf-8") as file:
+        snapshot = json.load(file)
 
-    return resultado
+    rows = []
+    for rec in snapshot.get("records", {}).values():
+        row = _prepare_record(rec)
+        if row is not None:
+            rows.append(row)
+    if not rows:
+        raise ValueError("Nenhuma pesquisa válida encontrada no snapshot.")
+
+    rows.sort(key=lambda row: (row["date"], row["instituto"], row["y"]))
+    dates = [row["date"] for row in rows]
+    delta_t = np.zeros(len(rows))
+    for t in range(1, len(rows)):
+        delta_t[t] = max((dates[t] - dates[t - 1]).total_seconds() / 86400.0, 0.0)
+
+    institutos = sorted({row["instituto"] for row in rows})
+    inst2idx = {inst: index for index, inst in enumerate(institutos)}
+    inst_idx = np.array([inst2idx[row["instituto"]] for row in rows], dtype=int)
+
+    print(f"\n{'─' * 68}")
+    print(f"  Dados: {len(rows)} observações | {len(institutos)} institutos")
+    print(f"  Período: {dates[0].date()} -> {dates[-1].date()}")
+    for inst in institutos:
+        print(f"  - {inst}: {int(np.sum(inst_idx == inst2idx[inst]))} pesquisas")
+
+    return {
+        "y": np.array([row["y"] for row in rows]),
+        "R": np.array([row["R"] for row in rows]),
+        "delta_t": delta_t,
+        "dates": dates,
+        "inst_idx": inst_idx,
+        "institutos": institutos,
+        "K": len(institutos),
+        "raw": rows,
+    }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# EXECUÇÃO DIRETA
-# ─────────────────────────────────────────────────────────────────────────────
+def calibrate_lambda(
+    start_date: datetime,
+    election_date: datetime = ELECTION_DATE,
+    residual_fraction: float = REVERSAO_RESTANTE,
+) -> tuple[float, float]:
+    """Calcula lambda=-log(r)/D0 e devolve também D0 em dias."""
+    if not (0.0 < residual_fraction < 1.0):
+        raise ValueError("residual_fraction deve pertencer a (0, 1).")
+    D0 = (election_date - start_date).total_seconds() / 86400.0
+    if D0 <= 0.0:
+        raise ValueError("A data da eleição deve ser posterior à primeira pesquisa.")
+    return float(-np.log(residual_fraction) / D0), float(D0)
+
+
+def transition_matrices(delta: float, lambda_: float, sigma_x2: float, q_mu: float):
+    """Matrizes A_t e G_t da discretização exata descrita na nota."""
+    if delta < 0.0:
+        raise ValueError("Delta_t não pode ser negativo.")
+    phi = float(np.exp(-lambda_ * delta))
+    if lambda_ > 1e-12:
+        a_t = float(-np.expm1(-2.0 * lambda_ * delta) / (2.0 * lambda_))
+    else:
+        a_t = float(delta)
+    A_t = np.array([[phi, 1.0 - phi], [0.0, 1.0]])
+    G_t = np.diag([a_t * sigma_x2, delta * q_mu])
+    return A_t, G_t, a_t
+
+
+def _full_biases(free_biases: np.ndarray, K: int) -> np.ndarray:
+    full = np.zeros(K)
+    if K > 1:
+        full[:-1] = free_biases
+        full[-1] = -float(np.sum(free_biases))
+    return full
+
+
+def kalman_filter(
+    y: np.ndarray,
+    R: np.ndarray,
+    delta_t: np.ndarray,
+    lambda_: float,
+    sigma_x2: float,
+    q_mu: float,
+    b_full: np.ndarray,
+    inst_idx: np.ndarray,
+):
+    """Filtro bidimensional usado no E-step; vieses entram como offset."""
+    T = len(y)
+    means_pred = np.empty((T, 2))
+    covs_pred = np.empty((T, 2, 2))
+    means_filt = np.empty((T, 2))
+    covs_filt = np.empty((T, 2, 2))
+    transitions = np.repeat(np.eye(2)[None, :, :], T, axis=0)
+    log_lik = 0.0
+    H = np.array([1.0, 0.0])
+    identity = np.eye(2)
+
+    for t in range(T):
+        if t == 0:
+            mean_pred = S0_MEAN.copy()
+            cov_pred = S0_COV.copy()
+        else:
+            A_t, G_t, _ = transition_matrices(delta_t[t], lambda_, sigma_x2, q_mu)
+            transitions[t] = A_t
+            mean_pred = A_t @ means_filt[t - 1]
+            cov_pred = A_t @ covs_filt[t - 1] @ A_t.T + G_t
+
+        innovation = y[t] - b_full[inst_idx[t]] - H @ mean_pred
+        innovation_var = float(H @ cov_pred @ H + R[t])
+        if not np.isfinite(innovation_var) or innovation_var <= 0.0:
+            raise FloatingPointError("Variância de inovação inválida no filtro.")
+        gain = cov_pred @ H / innovation_var
+        mean_filt = mean_pred + gain * innovation
+        I_KH = identity - np.outer(gain, H)
+        cov_filt = I_KH @ cov_pred @ I_KH.T + np.outer(gain, gain) * R[t]
+        cov_filt = 0.5 * (cov_filt + cov_filt.T)
+
+        means_pred[t], covs_pred[t] = mean_pred, cov_pred
+        means_filt[t], covs_filt[t] = mean_filt, cov_filt
+        log_lik -= 0.5 * (
+            np.log(2.0 * np.pi * innovation_var) + innovation**2 / innovation_var
+        )
+
+    return means_pred, covs_pred, means_filt, covs_filt, transitions, float(log_lik)
+
+
+def rts_smoother(means_pred, covs_pred, means_filt, covs_filt, transitions):
+    """Suavizador RTS e covariâncias cruzadas P_{t,t-1|T}."""
+    T = len(means_filt)
+    means_smooth = means_filt.copy()
+    covs_smooth = covs_filt.copy()
+    cross_covs = np.zeros((T, 2, 2))
+    smoother_gains = np.zeros((max(T - 1, 0), 2, 2))
+
+    for t in range(T - 2, -1, -1):
+        A_next = transitions[t + 1]
+        gain = np.linalg.solve(covs_pred[t + 1], A_next @ covs_filt[t]).T
+        smoother_gains[t] = gain
+        means_smooth[t] = means_filt[t] + gain @ (
+            means_smooth[t + 1] - means_pred[t + 1]
+        )
+        covs_smooth[t] = covs_filt[t] + gain @ (
+            covs_smooth[t + 1] - covs_pred[t + 1]
+        ) @ gain.T
+        covs_smooth[t] = 0.5 * (covs_smooth[t] + covs_smooth[t].T)
+
+    for t in range(1, T):
+        cross_covs[t] = covs_smooth[t] @ smoother_gains[t - 1].T
+    return means_smooth, covs_smooth, cross_covs
+
+
+def m_step(
+    y, R, delta_t, lambda_, means_smooth, covs_smooth, cross_covs, inst_idx, K
+):
+    """Atualizações fechadas de sigma_x², q_mu e vieses."""
+    ratios_x = []
+    ratios_mu = []
+    for t in range(1, len(y)):
+        if delta_t[t] <= 0.0:
+            # Pesquisas no mesmo instante são atualizações observacionais,
+            # não transições informativas sobre variância de processo.
+            continue
+        A_t, _, a_t = transition_matrices(delta_t[t], lambda_, 0.0, 0.0)
+        residual_mean = means_smooth[t] - A_t @ means_smooth[t - 1]
+        omega_t = (
+            covs_smooth[t]
+            + A_t @ covs_smooth[t - 1] @ A_t.T
+            - cross_covs[t] @ A_t.T
+            - A_t @ cross_covs[t].T
+            + np.outer(residual_mean, residual_mean)
+        )
+        ratios_x.append(max(float(omega_t[0, 0]), 0.0) / a_t)
+        ratios_mu.append(max(float(omega_t[1, 1]), 0.0) / delta_t[t])
+
+    if not ratios_x:
+        raise ValueError("São necessárias pesquisas em pelo menos duas datas distintas.")
+    sigma_x2 = max(float(np.mean(ratios_x)), VARIANCE_MIN)
+    q_mu = max(float(np.mean(ratios_mu)), VARIANCE_MIN)
+
+    if K == 1:
+        return sigma_x2, q_mu, np.zeros(0)
+
+    residual = y - means_smooth[:, 0]
+    weights = 1.0 / R
+    design = np.zeros((len(y), K - 1))
+    for t, index in enumerate(inst_idx):
+        if index < K - 1:
+            design[t, index] = 1.0
+        else:
+            design[t, :] = -1.0
+    normal = design.T @ (weights[:, None] * design)
+    rhs = design.T @ (weights * residual)
+    free_biases = np.linalg.solve(normal + np.eye(K - 1) * 1e-12, rhs)
+    return sigma_x2, q_mu, free_biases
+
+
+def run_em(data: dict, lambda_: float):
+    """Executa EM até estabilização da verossimilhança marginal."""
+    y, R = data["y"], data["R"]
+    delta_t, inst_idx, K = data["delta_t"], data["inst_idx"], data["K"]
+    sigma_x2, q_mu = SIGMA_X2_INIT, Q_MU_INIT
+    free_biases = np.zeros(max(K - 1, 0))
+    previous_ll = -np.inf
+    converged = False
+
+    print(f"\n  EM bidimensional: T={len(y)}, K={K}, lambda={lambda_:.8f}/dia")
+    print(f"  {'Iter':>5} {'Log-Lik':>14} {'Delta':>13} {'sigma_x':>11} {'sigma_mu':>11}")
+    for iteration in range(1, EM_MAX_ITER + 1):
+        b_full = _full_biases(free_biases, K)
+        filtered = kalman_filter(
+            y, R, delta_t, lambda_, sigma_x2, q_mu, b_full, inst_idx
+        )
+        means_pred, covs_pred, means_filt, covs_filt, transitions, log_lik = filtered
+        means_smooth, covs_smooth, cross_covs = rts_smoother(
+            means_pred, covs_pred, means_filt, covs_filt, transitions
+        )
+        new_sigma_x2, new_q_mu, new_biases = m_step(
+            y, R, delta_t, lambda_, means_smooth, covs_smooth,
+            cross_covs, inst_idx, K,
+        )
+        delta_ll = log_lik - previous_ll
+        if iteration <= 5 or iteration % 25 == 0:
+            print(
+                f"  {iteration:5d} {log_lik:14.5f} {delta_ll:13.5g} "
+                f"{np.sqrt(new_sigma_x2):11.6f} {np.sqrt(new_q_mu):11.6f}"
+            )
+
+        sigma_x2, q_mu, free_biases = new_sigma_x2, new_q_mu, new_biases
+        ll_scale = 1.0 + abs(previous_ll)
+        if iteration > 1 and abs(delta_ll) <= EM_TOL * ll_scale:
+            converged = True
+            print(
+                f"  Convergência em {iteration} iterações "
+                f"(|Delta LL|/(1+|LL|)={abs(delta_ll) / ll_scale:.2e})."
+            )
+            break
+        previous_ll = log_lik
+
+    b_full = _full_biases(free_biases, K)
+    filtered = kalman_filter(y, R, delta_t, lambda_, sigma_x2, q_mu, b_full, inst_idx)
+    means_pred, covs_pred, means_filt, covs_filt, transitions, log_lik = filtered
+    means_smooth, covs_smooth, _ = rts_smoother(
+        means_pred, covs_pred, means_filt, covs_filt, transitions
+    )
+    return {
+        "sigma_x2": sigma_x2,
+        "q_mu": q_mu,
+        "b_full": b_full,
+        "means_smooth": means_smooth,
+        "covs_smooth": covs_smooth,
+        "means_filt": means_filt,
+        "covs_filt": covs_filt,
+        "log_lik": log_lik,
+        "n_iter": iteration,
+        "converged": converged,
+    }
+
+
+def _build_H(inst_index: int, K: int) -> np.ndarray:
+    H = np.zeros(K + 1)
+    H[0] = 1.0
+    if K > 1:
+        if inst_index < K - 1:
+            H[2 + inst_index] = 1.0
+        else:
+            H[2:] = -1.0
+    return H
+
+
+def kalman_augmented(data: dict, lambda_: float, sigma_x2: float, q_mu: float, b_full):
+    """Filtro do vetor [x, mu, b_1, ..., b_{K-1}] com forma de Joseph."""
+    K, T = data["K"], len(data["y"])
+    dim = K + 1
+    mean = np.zeros(dim)
+    mean[:2] = S0_MEAN
+    if K > 1:
+        mean[2:] = b_full[:-1]
+    cov = np.zeros((dim, dim))
+    cov[:2, :2] = S0_COV
+    means = np.empty((T, dim))
+    covs = np.empty((T, dim, dim))
+
+    for t in range(T):
+        if t == 0:
+            mean_pred, cov_pred = mean.copy(), cov.copy()
+        else:
+            A_t, G_t, _ = transition_matrices(
+                data["delta_t"][t], lambda_, sigma_x2, q_mu
+            )
+            F_t = np.eye(dim)
+            F_t[:2, :2] = A_t
+            Q_t = np.zeros((dim, dim))
+            Q_t[:2, :2] = G_t
+            mean_pred = F_t @ mean
+            cov_pred = F_t @ cov @ F_t.T + Q_t
+
+        H_t = _build_H(data["inst_idx"][t], K)
+        innovation = data["y"][t] - H_t @ mean_pred
+        S_t = float(H_t @ cov_pred @ H_t + data["R"][t])
+        gain = cov_pred @ H_t / S_t
+        mean = mean_pred + gain * innovation
+        I_KH = np.eye(dim) - np.outer(gain, H_t)
+        cov = I_KH @ cov_pred @ I_KH.T + np.outer(gain, gain) * data["R"][t]
+        cov = 0.5 * (cov + cov.T)
+        means[t], covs[t] = mean, cov
+    return means, covs
+
+
+def _logistic(value):
+    value = np.asarray(value)
+    return np.where(value >= 0, 1.0 / (1.0 + np.exp(-value)), np.exp(value) / (1.0 + np.exp(value)))
+
+
+def _probability_interval(mean: float, variance: float) -> tuple[float, float]:
+    radius = 1.959964 * np.sqrt(max(float(variance), 0.0))
+    return float(_logistic(mean - radius)), float(_logistic(mean + radius))
+
+
+def run(
+    snapshot_file: str = SNAPSHOT_FILE,
+    output_file: str = OUTPUT_FILE,
+    election_date: datetime = ELECTION_DATE,
+    residual_fraction: float = REVERSAO_RESTANTE,
+) -> dict:
+    """Estima o modelo e grava parâmetros, estados curtos e estados persistentes."""
+    print("\n" + "=" * 68)
+    print("  AGREGADOR DE PESQUISAS - REVERSÃO À MÉDIA + RTS")
+    print("=" * 68)
+    data = load_and_prepare(snapshot_file)
+    lambda_, D0 = calibrate_lambda(data["dates"][0], election_date, residual_fraction)
+    print(
+        f"\n  Calibração: eleição={election_date.date()}, D0={D0:.1f} dias, "
+        f"r={residual_fraction:g}, lambda={lambda_:.8f}/dia, "
+        f"meia-vida={np.log(2.0) / lambda_:.1f} dias"
+    )
+
+    estimates = run_em(data, lambda_)
+    online_means, online_covs = kalman_augmented(
+        data, lambda_, estimates["sigma_x2"], estimates["q_mu"], estimates["b_full"]
+    )
+
+    print("\n  Parâmetros estimados:")
+    print(f"  sigma_x²={estimates['sigma_x2']:.10f} (sigma_x={np.sqrt(estimates['sigma_x2']):.6f}/raiz(dia))")
+    print(f"  q_mu={estimates['q_mu']:.10f} (sigma_mu={np.sqrt(estimates['q_mu']):.6f}/raiz(dia))")
+    for inst, bias in zip(data["institutos"], estimates["b_full"]):
+        print(f"  b[{inst}]={bias:+.6f}")
+
+    states = []
+    for t, row in enumerate(data["raw"]):
+        x_s, mu_s = estimates["means_smooth"][t]
+        P_s = estimates["covs_smooth"][t]
+        x_f, mu_f = online_means[t, :2]
+        P_f = online_covs[t, :2, :2]
+        x_s_lo, x_s_hi = _probability_interval(x_s, P_s[0, 0])
+        mu_s_lo, mu_s_hi = _probability_interval(mu_s, P_s[1, 1])
+        x_f_lo, x_f_hi = _probability_interval(x_f, P_f[0, 0])
+        mu_f_lo, mu_f_hi = _probability_interval(mu_f, P_f[1, 1])
+        states.append({
+            "t": t,
+            "data": row["date"].strftime("%Y-%m-%d"),
+            "instituto": row["instituto"],
+            "y_obs": round(float(data["y"][t]), 8),
+            "R_obs": round(float(data["R"][t]), 8),
+            "x_smooth": round(float(x_s), 8),
+            "mu_smooth": round(float(mu_s), 8),
+            "P_smooth": [[round(float(v), 8) for v in line] for line in P_s],
+            "p_curto_smooth": round(float(_logistic(x_s)), 6),
+            "p_curto_smooth_ic95_lo": round(x_s_lo, 6),
+            "p_curto_smooth_ic95_hi": round(x_s_hi, 6),
+            "p_longo_smooth": round(float(_logistic(mu_s)), 6),
+            "p_longo_smooth_ic95_lo": round(mu_s_lo, 6),
+            "p_longo_smooth_ic95_hi": round(mu_s_hi, 6),
+            "x_filt": round(float(x_f), 8),
+            "mu_filt": round(float(mu_f), 8),
+            "P_filt": [[round(float(v), 8) for v in line] for line in P_f],
+            "p_curto_filt": round(float(_logistic(x_f)), 6),
+            "p_curto_filt_ic95_lo": round(x_f_lo, 6),
+            "p_curto_filt_ic95_hi": round(x_f_hi, 6),
+            "p_longo_filt": round(float(_logistic(mu_f)), 6),
+            "p_longo_filt_ic95_lo": round(mu_f_lo, 6),
+            "p_longo_filt_ic95_hi": round(mu_f_hi, 6),
+        })
+
+    result = {
+        "timestamp": datetime.now().isoformat(timespec="seconds"),
+        "fonte": str(snapshot_file),
+        "nota_tecnica": "Agregador_de_Pesquisas_Eleitorais_Reversao_Media.tex",
+        "modelo": "reversao_media_ou_componente_persistente_v1",
+        "parametros": {
+            "data_eleicao": election_date.strftime("%Y-%m-%d"),
+            "data_inicial_calibracao": data["dates"][0].strftime("%Y-%m-%d"),
+            "D0_dias": round(D0, 6),
+            "fracao_desvio_restante": residual_fraction,
+            "lambda_por_dia": round(lambda_, 12),
+            "meia_vida_dias": round(float(np.log(2.0) / lambda_), 6),
+            "sigma_x2": round(float(estimates["sigma_x2"]), 12),
+            "sigma_x": round(float(np.sqrt(estimates["sigma_x2"])), 10),
+            "q_mu": round(float(estimates["q_mu"]), 12),
+            "sigma_mu": round(float(np.sqrt(estimates["q_mu"])), 10),
+            "log_verossimilhanca": round(float(estimates["log_lik"]), 8),
+            "n_iteracoes_em": estimates["n_iter"],
+            "convergiu": estimates["converged"],
+            "vieses": {
+                inst: round(float(bias), 10)
+                for inst, bias in zip(data["institutos"], estimates["b_full"])
+            },
+        },
+        "estados": states,
+    }
+    output_path = Path(output_file)
+    with output_path.open("w", encoding="utf-8") as file:
+        json.dump(result, file, ensure_ascii=False, indent=2)
+    print(f"\n  Resultado salvo em '{output_path}'.")
+    return result
+
 
 if __name__ == "__main__":
     resultado = run()
