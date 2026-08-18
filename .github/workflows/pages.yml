@@ -21,10 +21,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Baixar repositório
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Preparar Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -38,16 +38,13 @@ jobs:
       - name: Estimar séries e gerar gráficos
         run: python scripts/build_presidential_data.py
 
-      - name: Preparar pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 11.0.0
-
       - name: Preparar Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "22.13.0"
-          cache: pnpm
+
+      - name: Preparar pnpm
+        run: corepack enable && corepack prepare pnpm@11.0.0 --activate
 
       - name: Instalar dependências do site
         run: pnpm install --frozen-lockfile
@@ -62,7 +59,7 @@ jobs:
         run: pnpm run build:static
 
       - name: Empacotar páginas
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
         with:
           path: ./out
 
