@@ -63,6 +63,11 @@ jobs:
           mkdir -p pages-dist
           cp -RL out/. pages-dist/
           touch pages-dist/.nojekyll
+          if [ ! -s pages-dist/index.html ]; then
+            index_source="$(find pages-dist .next/server/app -type f -name index.html -size +0c -print -quit)"
+            test -n "$index_source"
+            cp "$index_source" pages-dist/index.html
+          fi
           test -s pages-dist/index.html
 
       - name: Empacotar páginas
