@@ -64,7 +64,10 @@ jobs:
           cp -RL out/. pages-dist/
           touch pages-dist/.nojekyll
           if [ ! -s pages-dist/index.html ]; then
-            index_source="$(find pages-dist .next/server/app -type f -name index.html -size +0c -print -quit)"
+            index_source=".next/server/app/index.html"
+            if [ ! -s "$index_source" ]; then
+              index_source="$(find pages-dist -type f -name index.html -size +0c ! -path '*/404/*' ! -path '*/_not-found/*' -print -quit)"
+            fi
             test -n "$index_source"
             cp "$index_source" pages-dist/index.html
           fi
