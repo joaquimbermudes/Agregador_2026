@@ -58,10 +58,17 @@ jobs:
           NEXT_PUBLIC_SITE_URL: ${{ github.server_url }}/${{ github.repository }}
         run: pnpm run build:static
 
+      - name: Materializar arquivos para o GitHub Pages
+        run: |
+          mkdir -p pages-dist
+          cp -RL out/. pages-dist/
+          touch pages-dist/.nojekyll
+          test -s pages-dist/index.html
+
       - name: Empacotar páginas
         uses: actions/upload-pages-artifact@v4
         with:
-          path: ./out
+          path: ./pages-dist
 
   deploy:
     environment:
