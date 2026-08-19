@@ -52,9 +52,6 @@ jobs:
       - name: Configurar GitHub Pages
         uses: actions/configure-pages@v5
 
-      - name: Preparar aplicação para a exportação estática
-        run: cp -R build/app app
-
       - name: Gerar site estático
         env:
           STATIC_EXPORT: "1"

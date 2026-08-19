@@ -2,7 +2,7 @@
 
 O modelo segue a nota ``Agregador_de_Pesquisas_Eleitorais_Reversao_Media.tex``:
 estado acoplado ``[x_t, mu_t]``, transição OU exata, EM com suavizador RTS para
-estimar ``sigma_x²`` e ``q_mu`` e nova passagem do filtro causal com os
+estimar a matriz de covariância do processo e nova passagem do filtro causal com os
 parâmetros finais. Não são usados vieses por instituto.
 """
 
@@ -60,7 +60,7 @@ MONTHS = {
     "nov": 11, "novembro": 11, "dez": 12, "dezembro": 12,
 }
 RESIDUAL_FRACTION = 0.01
-EM_MAX_ITER = 1000
+EM_MAX_ITER = 2000
 EM_TOL = 1e-5
 MC_DRAWS = 1000
 EPSILON = 1e-9
@@ -151,7 +151,10 @@ def _prepare_turn(records: list[dict[str, Any]], turn: str) -> dict[str, list[di
                 "valor_fonte_pct": float(value),
                 "percentual_validos": raw_p * 100.0,
                 "y": float(np.log(p / (1.0 - p))),
-                "R": float(1.0 / (effective_n * p * (1.0 - p))),
+                "R": float(
+                    kalman.OBSERVATION_VARIANCE_MULTIPLIER
+                    / (effective_n * p * (1.0 - p))
+                ),
             })
     for rows in prepared.values():
         rows.sort(key=lambda row: (row["date"], row["instituto"], row["cenario"], row["y"]))
@@ -177,33 +180,33 @@ def _estimate(data: dict[str, Any], election_date: datetime) -> dict[str, Any]:
     lambda_, calibration_days = kalman.calibrate_lambda(
         data["dates"][0], election_date, RESIDUAL_FRACTION
     )
-    sigma_x2, q_mu = kalman.SIGMA_X2_INIT, kalman.Q_MU_INIT
+    process_cov = kalman.PROCESS_COV_INIT.copy()
     zero_offset = np.zeros(1)
     previous_ll = -np.inf
     converged = False
     for iteration in range(1, EM_MAX_ITER + 1):
         filtered = kalman.kalman_filter(
-            data["y"], data["R"], data["delta_t"], lambda_, sigma_x2, q_mu,
+            data["y"], data["R"], data["delta_t"], lambda_, process_cov,
             zero_offset, data["inst_idx"],
         )
         means_pred, covs_pred, means_filt, covs_filt, transitions, log_lik = filtered
         means_smooth, covs_smooth, cross_covs = kalman.rts_smoother(
             means_pred, covs_pred, means_filt, covs_filt, transitions
         )
-        sigma_new, q_new, _ = kalman.m_step(
+        process_cov_new, _ = kalman.m_step(
             data["y"], data["R"], data["delta_t"], lambda_, means_smooth,
             covs_smooth, cross_covs, data["inst_idx"], 1,
         )
         delta_ll = log_lik - previous_ll
         scale = 1.0 + abs(previous_ll)
-        sigma_x2, q_mu = sigma_new, q_new
+        process_cov = process_cov_new
         if iteration > 1 and abs(delta_ll) <= EM_TOL * scale:
             converged = True
             break
         previous_ll = log_lik
 
     filtered = kalman.kalman_filter(
-        data["y"], data["R"], data["delta_t"], lambda_, sigma_x2, q_mu,
+        data["y"], data["R"], data["delta_t"], lambda_, process_cov,
         zero_offset, data["inst_idx"],
     )
     means_pred, covs_pred, means_filt, covs_filt, transitions, log_lik = filtered
@@ -212,7 +215,7 @@ def _estimate(data: dict[str, Any], election_date: datetime) -> dict[str, Any]:
     )
     return {
         "lambda": lambda_, "calibration_days": calibration_days,
-        "sigma_x2": sigma_x2, "q_mu": q_mu,
+        "process_cov": process_cov,
         "means_filt": means_filt, "covs_filt": covs_filt,
         "means_smooth": means_smooth, "covs_smooth": covs_smooth,
         "log_lik": log_lik, "iteration": iteration, "converged": converged,
@@ -379,8 +382,23 @@ def build() -> dict[str, Any]:
                 } for row in rows],
                 "parametros": {
                     "lambda_por_dia": round(float(estimate["lambda"]), 12),
-                    "sigma_x2": round(float(estimate["sigma_x2"]), 12),
-                    "q_mu": round(float(estimate["q_mu"]), 12),
+                    "matriz_covariancia_processo": [
+                        [round(float(value), 12) for value in row]
+                        for row in estimate["process_cov"]
+                    ],
+                    "sigma_x2": round(float(estimate["process_cov"][0, 0]), 12),
+                    "q_mu": round(float(estimate["process_cov"][1, 1]), 12),
+                    "cov_x_mu": round(float(estimate["process_cov"][0, 1]), 12),
+                    "corr_x_mu": round(float(
+                        estimate["process_cov"][0, 1]
+                        / np.sqrt(
+                            estimate["process_cov"][0, 0]
+                            * estimate["process_cov"][1, 1]
+                        )
+                    ), 10),
+                    "multiplicador_variancia_observacional": (
+                        kalman.OBSERVATION_VARIANCE_MULTIPLIER
+                    ),
                     "log_verossimilhanca": round(float(estimate["log_lik"]), 8),
                     "iteracoes_em": int(estimate["iteration"]),
                     "convergiu": bool(estimate["converged"]),
@@ -410,7 +428,7 @@ def build() -> dict[str, Any]:
 
     payload = {
         "gerado_em": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "modelo": "estado_acoplado_curto_longo_em_rts_sem_vies_instituto",
+        "modelo": "estado_acoplado_covariancia_completa_em_rts_sem_vies_instituto",
         "fonte": "Pesquisas presidenciais de 2026 na Wikipédia",
         "turnos": turns,
     }

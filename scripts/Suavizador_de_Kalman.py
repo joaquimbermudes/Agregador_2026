@@ -7,7 +7,7 @@ Implementa a nota técnica ``Agregador_de_Pesquisas_Eleitorais_Reversao_Media.te
 * x_t reverte ao componente persistente mu_t por uma transição OU exata;
 * mu_t segue passeio aleatório;
 * vieses dos institutos somam zero;
-* sigma_x², q_mu e vieses são estimados por EM + suavizador RTS.
+* a matriz de covariância do processo e os vieses são estimados por EM + RTS.
 
 O JSON produzido é consumido por ``kalman_filtro_online.py``.
 """
@@ -40,13 +40,15 @@ INSTITUTOS_CANONICOS = {
 }
 NOME_NORMALIZADO = {"Apex/Futura": "Futura/Apex"}
 
-EM_MAX_ITER = 500
+EM_MAX_ITER = 2000
 # Tolerância relativa da log-verossimilhança. Com poucas pesquisas, exigir
 # variação absoluta quase nula prolonga o EM sem mudança material no ajuste.
 EM_TOL = 1e-6
 SIGMA_X2_INIT = 0.005
 Q_MU_INIT = 0.0001
 VARIANCE_MIN = 1e-12
+OBSERVATION_VARIANCE_MULTIPLIER = 2.0
+PROCESS_COV_INIT = np.diag([SIGMA_X2_INIT, Q_MU_INIT])
 
 S0_MEAN = np.array([0.0, 0.0])
 S0_COV = np.diag([10.0, 10.0])
@@ -127,7 +129,10 @@ def _prepare_record(rec: dict) -> dict | None:
         return None
 
     y_t = float(np.log(p_t / (1.0 - p_t)))
-    R_t = float(1.0 / (n * q_t * p_t * (1.0 - p_t)))
+    R_t = float(
+        OBSERVATION_VARIANCE_MULTIPLIER
+        / (n * q_t * p_t * (1.0 - p_t))
+    )
     return {
         "date": date,
         "instituto": nome,
@@ -196,8 +201,8 @@ def calibrate_lambda(
     return float(-np.log(residual_fraction) / D0), float(D0)
 
 
-def transition_matrices(delta: float, lambda_: float, sigma_x2: float, q_mu: float):
-    """Matrizes A_t e G_t da discretização exata descrita na nota."""
+def transition_matrices(delta: float, lambda_: float, process_cov: np.ndarray):
+    """Matrizes A_t e G_t, incluindo a covariância entre x_t e mu_t."""
     if delta < 0.0:
         raise ValueError("Delta_t não pode ser negativo.")
     phi = float(np.exp(-lambda_ * delta))
@@ -206,8 +211,19 @@ def transition_matrices(delta: float, lambda_: float, sigma_x2: float, q_mu: flo
     else:
         a_t = float(delta)
     A_t = np.array([[phi, 1.0 - phi], [0.0, 1.0]])
-    G_t = np.diag([a_t * sigma_x2, delta * q_mu])
-    return A_t, G_t, a_t
+    scales = np.sqrt(np.array([a_t, delta], dtype=float))
+    G_t = process_cov * np.outer(scales, scales)
+    G_t = 0.5 * (G_t + G_t.T)
+    return A_t, G_t, scales
+
+
+def _nearest_process_cov(matrix: np.ndarray) -> np.ndarray:
+    """Projeta uma estimativa simétrica no cone positivo definido."""
+    symmetric = 0.5 * (np.asarray(matrix, dtype=float) + np.asarray(matrix, dtype=float).T)
+    eigenvalues, eigenvectors = np.linalg.eigh(symmetric)
+    eigenvalues = np.maximum(eigenvalues, VARIANCE_MIN)
+    projected = (eigenvectors * eigenvalues) @ eigenvectors.T
+    return 0.5 * (projected + projected.T)
 
 
 def _full_biases(free_biases: np.ndarray, K: int) -> np.ndarray:
@@ -223,8 +239,7 @@ def kalman_filter(
     R: np.ndarray,
     delta_t: np.ndarray,
     lambda_: float,
-    sigma_x2: float,
-    q_mu: float,
+    process_cov: np.ndarray,
     b_full: np.ndarray,
     inst_idx: np.ndarray,
 ):
@@ -244,7 +259,7 @@ def kalman_filter(
             mean_pred = S0_MEAN.copy()
             cov_pred = S0_COV.copy()
         else:
-            A_t, G_t, _ = transition_matrices(delta_t[t], lambda_, sigma_x2, q_mu)
+            A_t, G_t, _ = transition_matrices(delta_t[t], lambda_, process_cov)
             transitions[t] = A_t
             mean_pred = A_t @ means_filt[t - 1]
             cov_pred = A_t @ covs_filt[t - 1] @ A_t.T + G_t
@@ -296,15 +311,16 @@ def rts_smoother(means_pred, covs_pred, means_filt, covs_filt, transitions):
 def m_step(
     y, R, delta_t, lambda_, means_smooth, covs_smooth, cross_covs, inst_idx, K
 ):
-    """Atualizações fechadas de sigma_x², q_mu e vieses."""
-    ratios_x = []
-    ratios_mu = []
+    """Atualiza a matriz de covariância do processo e os vieses."""
+    normalized_covs = []
     for t in range(1, len(y)):
         if delta_t[t] <= 0.0:
             # Pesquisas no mesmo instante são atualizações observacionais,
             # não transições informativas sobre variância de processo.
             continue
-        A_t, _, a_t = transition_matrices(delta_t[t], lambda_, 0.0, 0.0)
+        A_t, _, scales = transition_matrices(
+            delta_t[t], lambda_, np.zeros((2, 2))
+        )
         residual_mean = means_smooth[t] - A_t @ means_smooth[t - 1]
         omega_t = (
             covs_smooth[t]
@@ -313,16 +329,15 @@ def m_step(
             - A_t @ cross_covs[t].T
             + np.outer(residual_mean, residual_mean)
         )
-        ratios_x.append(max(float(omega_t[0, 0]), 0.0) / a_t)
-        ratios_mu.append(max(float(omega_t[1, 1]), 0.0) / delta_t[t])
+        inverse_scales = np.diag(1.0 / scales)
+        normalized_covs.append(inverse_scales @ omega_t @ inverse_scales)
 
-    if not ratios_x:
+    if not normalized_covs:
         raise ValueError("São necessárias pesquisas em pelo menos duas datas distintas.")
-    sigma_x2 = max(float(np.mean(ratios_x)), VARIANCE_MIN)
-    q_mu = max(float(np.mean(ratios_mu)), VARIANCE_MIN)
+    process_cov = _nearest_process_cov(np.mean(normalized_covs, axis=0))
 
     if K == 1:
-        return sigma_x2, q_mu, np.zeros(0)
+        return process_cov, np.zeros(0)
 
     residual = y - means_smooth[:, 0]
     weights = 1.0 / R
@@ -335,41 +350,48 @@ def m_step(
     normal = design.T @ (weights[:, None] * design)
     rhs = design.T @ (weights * residual)
     free_biases = np.linalg.solve(normal + np.eye(K - 1) * 1e-12, rhs)
-    return sigma_x2, q_mu, free_biases
+    return process_cov, free_biases
 
 
 def run_em(data: dict, lambda_: float):
     """Executa EM até estabilização da verossimilhança marginal."""
     y, R = data["y"], data["R"]
     delta_t, inst_idx, K = data["delta_t"], data["inst_idx"], data["K"]
-    sigma_x2, q_mu = SIGMA_X2_INIT, Q_MU_INIT
+    process_cov = PROCESS_COV_INIT.copy()
     free_biases = np.zeros(max(K - 1, 0))
     previous_ll = -np.inf
     converged = False
 
     print(f"\n  EM bidimensional: T={len(y)}, K={K}, lambda={lambda_:.8f}/dia")
-    print(f"  {'Iter':>5} {'Log-Lik':>14} {'Delta':>13} {'sigma_x':>11} {'sigma_mu':>11}")
+    print(
+        f"  {'Iter':>5} {'Log-Lik':>14} {'Delta':>13} "
+        f"{'sigma_x':>11} {'sigma_mu':>11} {'rho':>9}"
+    )
     for iteration in range(1, EM_MAX_ITER + 1):
         b_full = _full_biases(free_biases, K)
         filtered = kalman_filter(
-            y, R, delta_t, lambda_, sigma_x2, q_mu, b_full, inst_idx
+            y, R, delta_t, lambda_, process_cov, b_full, inst_idx
         )
         means_pred, covs_pred, means_filt, covs_filt, transitions, log_lik = filtered
         means_smooth, covs_smooth, cross_covs = rts_smoother(
             means_pred, covs_pred, means_filt, covs_filt, transitions
         )
-        new_sigma_x2, new_q_mu, new_biases = m_step(
+        new_process_cov, new_biases = m_step(
             y, R, delta_t, lambda_, means_smooth, covs_smooth,
             cross_covs, inst_idx, K,
         )
         delta_ll = log_lik - previous_ll
+        new_rho = new_process_cov[0, 1] / np.sqrt(
+            new_process_cov[0, 0] * new_process_cov[1, 1]
+        )
         if iteration <= 5 or iteration % 25 == 0:
             print(
                 f"  {iteration:5d} {log_lik:14.5f} {delta_ll:13.5g} "
-                f"{np.sqrt(new_sigma_x2):11.6f} {np.sqrt(new_q_mu):11.6f}"
+                f"{np.sqrt(new_process_cov[0, 0]):11.6f} "
+                f"{np.sqrt(new_process_cov[1, 1]):11.6f} {new_rho:9.5f}"
             )
 
-        sigma_x2, q_mu, free_biases = new_sigma_x2, new_q_mu, new_biases
+        process_cov, free_biases = new_process_cov, new_biases
         ll_scale = 1.0 + abs(previous_ll)
         if iteration > 1 and abs(delta_ll) <= EM_TOL * ll_scale:
             converged = True
@@ -381,14 +403,13 @@ def run_em(data: dict, lambda_: float):
         previous_ll = log_lik
 
     b_full = _full_biases(free_biases, K)
-    filtered = kalman_filter(y, R, delta_t, lambda_, sigma_x2, q_mu, b_full, inst_idx)
+    filtered = kalman_filter(y, R, delta_t, lambda_, process_cov, b_full, inst_idx)
     means_pred, covs_pred, means_filt, covs_filt, transitions, log_lik = filtered
     means_smooth, covs_smooth, _ = rts_smoother(
         means_pred, covs_pred, means_filt, covs_filt, transitions
     )
     return {
-        "sigma_x2": sigma_x2,
-        "q_mu": q_mu,
+        "process_cov": process_cov,
         "b_full": b_full,
         "means_smooth": means_smooth,
         "covs_smooth": covs_smooth,
@@ -411,7 +432,7 @@ def _build_H(inst_index: int, K: int) -> np.ndarray:
     return H
 
 
-def kalman_augmented(data: dict, lambda_: float, sigma_x2: float, q_mu: float, b_full):
+def kalman_augmented(data: dict, lambda_: float, process_cov: np.ndarray, b_full):
     """Filtro do vetor [x, mu, b_1, ..., b_{K-1}] com forma de Joseph."""
     K, T = data["K"], len(data["y"])
     dim = K + 1
@@ -429,7 +450,7 @@ def kalman_augmented(data: dict, lambda_: float, sigma_x2: float, q_mu: float, b
             mean_pred, cov_pred = mean.copy(), cov.copy()
         else:
             A_t, G_t, _ = transition_matrices(
-                data["delta_t"][t], lambda_, sigma_x2, q_mu
+                data["delta_t"][t], lambda_, process_cov
             )
             F_t = np.eye(dim)
             F_t[:2, :2] = A_t
@@ -480,12 +501,14 @@ def run(
 
     estimates = run_em(data, lambda_)
     online_means, online_covs = kalman_augmented(
-        data, lambda_, estimates["sigma_x2"], estimates["q_mu"], estimates["b_full"]
+        data, lambda_, estimates["process_cov"], estimates["b_full"]
     )
 
+    process_cov = estimates["process_cov"]
+    process_corr = process_cov[0, 1] / np.sqrt(process_cov[0, 0] * process_cov[1, 1])
     print("\n  Parâmetros estimados:")
-    print(f"  sigma_x²={estimates['sigma_x2']:.10f} (sigma_x={np.sqrt(estimates['sigma_x2']):.6f}/raiz(dia))")
-    print(f"  q_mu={estimates['q_mu']:.10f} (sigma_mu={np.sqrt(estimates['q_mu']):.6f}/raiz(dia))")
+    print(f"  Q_processo=\n{process_cov}")
+    print(f"  corr(x, mu)={process_corr:+.6f}")
     for inst, bias in zip(data["institutos"], estimates["b_full"]):
         print(f"  b[{inst}]={bias:+.6f}")
 
@@ -529,7 +552,7 @@ def run(
         "timestamp": datetime.now().isoformat(timespec="seconds"),
         "fonte": str(snapshot_file),
         "nota_tecnica": "Agregador_de_Pesquisas_Eleitorais_Reversao_Media.tex",
-        "modelo": "reversao_media_ou_componente_persistente_v1",
+        "modelo": "reversao_media_ou_componente_persistente_covariancia_v2",
         "parametros": {
             "data_eleicao": election_date.strftime("%Y-%m-%d"),
             "data_inicial_calibracao": data["dates"][0].strftime("%Y-%m-%d"),
@@ -537,10 +560,17 @@ def run(
             "fracao_desvio_restante": residual_fraction,
             "lambda_por_dia": round(lambda_, 12),
             "meia_vida_dias": round(float(np.log(2.0) / lambda_), 6),
-            "sigma_x2": round(float(estimates["sigma_x2"]), 12),
-            "sigma_x": round(float(np.sqrt(estimates["sigma_x2"])), 10),
-            "q_mu": round(float(estimates["q_mu"]), 12),
-            "sigma_mu": round(float(np.sqrt(estimates["q_mu"])), 10),
+            "matriz_covariancia_processo": [
+                [round(float(value), 12) for value in row]
+                for row in process_cov
+            ],
+            "sigma_x2": round(float(process_cov[0, 0]), 12),
+            "sigma_x": round(float(np.sqrt(process_cov[0, 0])), 10),
+            "q_mu": round(float(process_cov[1, 1]), 12),
+            "sigma_mu": round(float(np.sqrt(process_cov[1, 1])), 10),
+            "cov_x_mu": round(float(process_cov[0, 1]), 12),
+            "corr_x_mu": round(float(process_corr), 10),
+            "multiplicador_variancia_observacional": OBSERVATION_VARIANCE_MULTIPLIER,
             "log_verossimilhanca": round(float(estimates["log_lik"]), 8),
             "n_iteracoes_em": estimates["n_iter"],
             "convergiu": estimates["converged"],

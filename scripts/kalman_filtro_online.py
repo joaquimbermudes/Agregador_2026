@@ -29,6 +29,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from scipy.stats import norm
 
+import Suavizador_de_Kalman as kalman
+
 # ─────────────────────────────────────────────────────────────────────────────
 # ⚙️  CONFIGURAÇÕES
 # ─────────────────────────────────────────────────────────────────────────────
@@ -102,12 +104,16 @@ def _last_date(date_range: str, year: str) -> datetime | None:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def load_kalman_params(kalman_file: str = KALMAN_FILE) -> dict:
-    """Lê kalman_parametros.json e devolve dict com sigma2, b_full, estados."""
+    """Lê a matriz do processo, lambda, vieses e estados suavizados."""
     with open(kalman_file, encoding="utf-8") as f:
         kp = json.load(f)
 
-    sigma2  = kp["parametros"]["sigma2_por_dia"]
-    vieses  = kp["parametros"]["vieses"]          # {instituto: b_i}
+    parametros = kp["parametros"]
+    process_cov = np.asarray(
+        parametros["matriz_covariancia_processo"], dtype=float
+    )
+    lambda_ = float(parametros["lambda_por_dia"])
+    vieses  = parametros["vieses"]                 # {instituto: b_i}
     estados = kp["estados"]                        # list of {data, instituto, …}
 
     # Conjunto de (data, instituto) já suavizados
@@ -120,12 +126,14 @@ def load_kalman_params(kalman_file: str = KALMAN_FILE) -> dict:
     }
 
     print(f"  Parâmetros carregados de '{kalman_file}'")
-    print(f"    σ²  = {sigma2:.10f}  |  σ/dia = {np.sqrt(sigma2):.6f}")
+    print(f"    lambda = {lambda_:.10f}/dia")
+    print(f"    matriz de covariância do processo =\n{process_cov}")
     for inst, b in vieses.items():
         print(f"    b[{inst}] = {b:+.6f}")
     print(f"  Estados suavizados no arquivo: {len(estados)}")
 
-    return dict(sigma2=sigma2, vieses=vieses, y_suavizados=y_suavizados,
+    return dict(process_cov=process_cov, lambda_=lambda_, vieses=vieses,
+                y_suavizados=y_suavizados,
                 datas_suavizadas=y_suavizados, estados=estados,
                 raw_kp=kp)
 
@@ -169,7 +177,10 @@ def load_snapshot_observations(
             continue
 
         y_t = np.log(p_t / (1.0 - p_t))
-        R_t = 1.0 / (n * q_t * p_t * (1.0 - p_t))
+        R_t = (
+            kalman.OBSERVATION_VARIANCE_MULTIPLIER
+            / (n * q_t * p_t * (1.0 - p_t))
+        )
 
         date_str = date.strftime("%Y-%m-%d")
         is_nova  = (nome, round(y_t, 4)) not in datas_suavizadas
@@ -193,31 +204,33 @@ def load_snapshot_observations(
 
 def _build_H(inst_idx: int, K: int, institutos: list) -> np.ndarray:
     """
-    Constrói H_t ∈ R^K conforme Eq. (23)-(24):
-      Estado aumentado: [x, b_1, …, b_{K-1}]
+    Constrói H_t para o estado [x, mu, b_1, …, b_{K-1}].
       H[0] = 1 (sempre)
-      Se i_t = j < K-1: H[1+j] = +1
-      Se i_t = K-1    : H[1:] = -1  (b_K = -Σb)
+      Se i_t = j < K-1: H[2+j] = +1
+      Se i_t = K-1    : H[2:] = -1  (b_K = -Σb)
     """
-    H = np.zeros(K)
+    H = np.zeros(K + 1)
     H[0] = 1.0
-    if inst_idx < K - 1:           # Eq. 23
-        H[1 + inst_idx] = 1.0
-    else:                          # Eq. 24
-        H[1:] = -1.0
+    if K > 1:
+        if inst_idx < K - 1:
+            H[2 + inst_idx] = 1.0
+        else:
+            H[2:] = -1.0
     return H
 
 
 def kalman_filter_online(
         rows: list[dict],
-        sigma2: float,
+        lambda_: float,
+        process_cov: np.ndarray,
         vieses: dict,
         institutos: list[str]) -> list[dict]:
     """
     Filtro de Kalman aumentado na série completa.
 
-    Estado augmentado: x_t = [x_latente, b_1, …, b_{K-1}]^T ∈ R^K
-    Dinâmica:  x_t = x_{t-1} + w_t,   Q_t = diag(Δt·σ², 0,…,0)
+    Estado aumentado: [x_t, mu_t, b_1, …, b_{K-1}]^T ∈ R^(K+1).
+    O bloco [x_t, mu_t] usa a transição OU e a matriz de covariância
+    completa estimadas pelo EM; os vieses permanecem fixos.
     Observação: y_t = H_t · x_t + v_t, v_t ~ N(0, R_t)
 
     Regra especial: NÃO se aplica o passo de predição para a ÚLTIMA
@@ -228,13 +241,14 @@ def kalman_filter_online(
     K         = len(institutos)
     inst2idx  = {inst: i for i, inst in enumerate(institutos)}
 
-    # ── Estado inicial: prior difuso em x, vieses fixos ──────────────────
-    dim   = K
+    # ── Estado inicial: prior difuso nos estados, vieses fixos ───────────
+    dim   = K + 1
     x_aug = np.zeros(dim)
+    x_aug[:2] = kalman.S0_MEAN
     for i, inst in enumerate(institutos[:-1]):   # b_1 … b_{K-1}
-        x_aug[1 + i] = vieses[inst]
+        x_aug[2 + i] = vieses[inst]
     P_aug = np.zeros((dim, dim))
-    P_aug[0, 0] = X0_VAR                         # incerteza apenas no estado latente
+    P_aug[:2, :2] = kalman.S0_COV
 
     T = len(rows)
     resultados = []
@@ -246,11 +260,19 @@ def kalman_filter_online(
         # Aplica-se para todas as observações exceto a primeira
         # (e não se extrapola APÓS a última)
         if t > 0:
-            delta_t = max((row["date"] - rows[t - 1]["date"]).days, 0)
+            delta_t = max(
+                (row["date"] - rows[t - 1]["date"]).total_seconds() / 86400.0,
+                0.0,
+            )
+            A_t, G_t, _ = kalman.transition_matrices(
+                delta_t, lambda_, process_cov
+            )
+            F_t = np.eye(dim)
+            F_t[:2, :2] = A_t
             Q = np.zeros((dim, dim))
-            Q[0, 0] = delta_t * sigma2
-            x_pred = x_aug.copy()              # Eq. 25: F=I
-            P_pred = P_aug + Q                 # Eq. 26
+            Q[:2, :2] = G_t
+            x_pred = F_t @ x_aug
+            P_pred = F_t @ P_aug @ F_t.T + Q
         else:
             x_pred = x_aug.copy()
             P_pred = P_aug.copy()
@@ -281,6 +303,10 @@ def kalman_filter_online(
             t=t, **row,
             x_pred=x_p, P_pred=P_p,
             x_filt=x_f, P_filt=P_f,
+            mu_pred=float(x_pred[1]),
+            mu_filt=float(x_filt[1]),
+            P_estados_pred=P_pred[:2, :2].copy(),
+            P_estados_filt=P_filt[:2, :2].copy(),
             p_filt=_logistic(x_f),
             ic95_lo=_logistic(x_f - 1.96 * np.sqrt(P_f)),
             ic95_hi=_logistic(x_f + 1.96 * np.sqrt(P_f)),
@@ -498,7 +524,8 @@ def run(kalman_file:   str = KALMAN_FILE,
     print(f"\n📂  Carregando parâmetros de '{kalman_file}'...")
     kp = load_kalman_params(kalman_file)
 
-    sigma2           = kp["sigma2"]
+    process_cov      = kp["process_cov"]
+    lambda_          = kp["lambda_"]
     vieses           = kp["vieses"]
     datas_suavizadas = kp["datas_suavizadas"]
 
@@ -531,7 +558,7 @@ def run(kalman_file:   str = KALMAN_FILE,
           f"({rows[-1]['date'].strftime('%d/%m/%Y')}).")
 
     resultados, x_final_vec, P_final_mat = kalman_filter_online(
-        rows, sigma2, vieses, institutos)
+        rows, lambda_, process_cov, vieses, institutos)
 
     x_final = float(x_final_vec[0])
     P_final = float(P_final_mat[0, 0])
@@ -569,8 +596,13 @@ def run(kalman_file:   str = KALMAN_FILE,
         },
         "estado_filtrado_logit": {
             "x_final": round(x_final, 6),
+            "mu_final": round(float(x_final_vec[1]), 6),
             "P_final": round(P_final, 8),
             "sigma":   round(float(sig), 8),
+            "matriz_covariancia_estados": [
+                [round(float(value), 8) for value in row]
+                for row in P_final_mat[:2, :2]
+            ],
         },
     }
     with open(output_json, "w", encoding="utf-8") as f:
