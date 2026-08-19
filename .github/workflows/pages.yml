@@ -44,7 +44,7 @@ jobs:
           node-version: "22.13.0"
 
       - name: Preparar pnpm
-        run: corepack enable && corepack prepare pnpm@11.0.0 --activate
+        run: npm install --global pnpm@11.0.0
 
       - name: Instalar dependências do site
         run: pnpm install --frozen-lockfile
